@@ -1,0 +1,46 @@
+From 3cef9dedc4cc04a7d48d55c80299e7f3d57481b2 Mon Sep 17 00:00:00 2001
+From: Will Twomey <william.twomey@gmail.com>
+Date: Wed, 11 Nov 2026 12:55:37 -0600
+Subject: [PATCH] ANDROID: xfs: fix double ILOCK unlock in
+ xfs_buffered_write_iomap_begin
+
+The revert of "xfs: use iomap_valid method to detect stale cached
+iomaps" (2061a2038206) restored the early xfs_iunlock(ip, XFS_ILOCK_EXCL)
+at found_cow. The 6.1.138 merge then brought in stable "xfs: match lock
+mode in xfs_buffered_write_iomap_begin()" (upstream bb712842a85d), and
+the resolution kept upstream's xfs_iunlock(ip, lockmode) before each
+return as well, so the COW path drops the ILOCK twice. The rwsem is
+corrupted and the next xfs_ilock() on the inode sleeps forever.
+
+The COW path is reached on shared extents (reflink=1, the mkfs.xfs
+default), which overlayfs copy-up creates, so overlayfs on XFS (e.g.
+Docker overlay2) hangs in D state on the first chown/chmod of a
+copied-up file:
+
+  chown D: xfs_ilock <- xfs_map_blocks <- iomap_do_writepage <- ...
+           <- xfs_setattr_size <- xfs_vn_setattr <- ovl_copy_up_metadata
+
+Drop the stale early unlock so the block matches upstream 6.1.y.
+
+Fixes: 4c7f06c5da94 ("Merge 6.1.138 into android14-6.1-lts")
+Change-Id: I21fa3ff556269e61e54d0740c2f09a46225622ba
+Signed-off-by: Will Twomey <william.twomey@gmail.com>
+---
+ fs/xfs/xfs_iomap.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/fs/xfs/xfs_iomap.c b/fs/xfs/xfs_iomap.c
+index d029284f22e4..99af800f2953 100644
+--- a/fs/xfs/xfs_iomap.c
++++ b/fs/xfs/xfs_iomap.c
+@@ -1114,7 +1114,6 @@ xfs_buffered_write_iomap_begin(
+ 	return 0;
+ 
+ found_cow:
+-	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+ 	if (imap.br_startoff <= offset_fsb) {
+ 		error = xfs_bmbt_to_iomap(ip, srcmap, &imap, flags, 0);
+ 		if (error)
+-- 
+2.53.0
+
