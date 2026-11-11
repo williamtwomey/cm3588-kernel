@@ -1,0 +1,7 @@
+kernel 6.1.141-fsfix2; xfs on /dev/loop8; 5 rounds x 20000 files
+round 1: chown rc=0 chmod rc=0 4s, D-state procs=0
+round 2: chown rc=0 chmod rc=0 8s, D-state procs=0
+round 3: chown rc=0 chmod rc=0 7s, D-state procs=0
+round 4: chown rc=0 chmod rc=0 6s, D-state procs=0
+round 5: chown rc=0 chmod rc=0 7s, D-state procs=0
+PASS

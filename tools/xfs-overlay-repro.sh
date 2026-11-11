@@ -53,6 +53,7 @@ for r in $(seq 1 "$ROUNDS"); do
   echo "round $r: chown rc=$c chmod rc=$f ${dur}s, D-state procs=$dstate"
   if [[ $c -ne 0 || $f -ne 0 || $dstate -gt 0 ]]; then fail=1; break; fi
   umount "$D/merged"
+  rm -rf "$D"   # each round leaves ~300M of lower+upper; 2.8G fills by round 9
 done
 dmesg | tail -n +$((N0 + 1)) | grep -E "blocked for more than|hung_task|INFO: task|XFS .*(rror|orrupt|hutdown)|overlayfs: .*rror" | tail -20 | grep . && fail=1
 if [[ $fail -eq 0 ]]; then echo "PASS"; else
