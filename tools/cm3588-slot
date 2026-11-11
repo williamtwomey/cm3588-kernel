@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""Read/write the A/B slot metadata that FriendlyElec's A/B U-Boot keeps in `misc`.
+
+Format: libavb AvbABData, 32 bytes at offset 2048 of the `misc` partition
+(uboot lib/avb/rk_avb_user/rk_ab_ops_user.c, AB_METADATA_MISC_PARTITION_OFFSET).
+CRC32 over the first 28 bytes, stored big-endian.
+
+U-Boot boots the highest-priority slot that is either successful or has tries
+left, and decrements tries on each boot of a slot that isn't marked successful.
+If no slot is bootable it boots `last_boot`.
+
+Only the boot SD card carries A/B metadata. The eMMC also has a `misc`
+partition (Android BCB), so the device is found by looking for the disk that
+has both `misc` and `boot_a`, never by partlabel alone.
+
+  cm3588-slot status
+  cm3588-slot mark-good            # current slot (from /proc/cmdline) successful + last_boot
+  cm3588-slot arm b [--tries 2]    # try slot b next, fall back to the other when tries run out
+  cm3588-slot init                 # fresh metadata: a bootable (3 tries), b unbootable
+  [--dev /dev/mmcblkXpN]           # explicit misc partition (or a misc.img file)
+"""
+import argparse
+import glob
+import os
+import struct
+import sys
+import zlib
+
+OFFSET = 2048
+MAGIC = b"\0AB0"
+FMT = ">4sBB2s4s4sB11sI"  # crc is big-endian; everything else is single bytes
+SIZE = 32
+MAX_PRIORITY = 15
+
+
+def find_misc():
+    for disk in sorted(glob.glob("/sys/block/*")):
+        names = {}
+        for part in glob.glob(os.path.join(disk, os.path.basename(disk) + "*")):
+            try:
+                with open(os.path.join(part, "uevent")) as f:
+                    ue = dict(l.strip().split("=", 1) for l in f if "=" in l)
+            except OSError:
+                continue
+            if "PARTNAME" in ue:
+                names[ue["PARTNAME"]] = "/dev/" + ue["DEVNAME"]
+        if "misc" in names and "boot_a" in names:
+            return names["misc"]
+    sys.exit("no disk with both 'misc' and 'boot_a' partitions (is the A/B SD card in?)")
+
+
+def unpack(raw):
+    magic, vmaj, vmin, _r1, a, b, last, _r2, crc = struct.unpack(FMT, raw)
+    if magic != MAGIC:
+        return None
+    if zlib.crc32(raw[:SIZE - 4]) & 0xFFFFFFFF != crc:
+        sys.exit("A/B metadata CRC mismatch; refusing to touch it (use 'init' to reset)")
+    slot = lambda s: {"priority": s[0], "tries": s[1], "successful": s[2]}
+    return {"ver": (vmaj, vmin), "a": slot(a), "b": slot(b), "last_boot": last}
+
+
+def pack(d):
+    s = lambda x: bytes([x["priority"], x["tries"], x["successful"], 0])
+    body = struct.pack(">4sBB2s4s4sB11s", MAGIC, 1, 0, b"\0\0", s(d["a"]), s(d["b"]),
+                       d["last_boot"], b"\0" * 11)
+    return body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+
+
+def read(dev):
+    with open(dev, "rb") as f:
+        f.seek(OFFSET)
+        return f.read(SIZE)
+
+
+def write(dev, d):
+    raw = pack(d)
+    with open(dev, "r+b") as f:
+        f.seek(OFFSET)
+        f.write(raw)
+        f.flush()
+        os.fsync(f.fileno())
+    assert read(dev) == raw
+
+
+def current_slot():
+    with open("/proc/cmdline") as f:
+        for tok in f.read().split():
+            if tok.startswith("androidboot.slot_suffix="):
+                return tok.split("=", 1)[1].lstrip("_")
+    return None
+
+
+def show(d, dev):
+    cur = current_slot()
+    print(f"misc: {dev}   booted slot: {cur or 'none (not booted via A/B)'}")
+    for n in "ab":
+        s = d[n]
+        state = "good" if s["successful"] else (f"{s['tries']} tries left" if s["tries"] else "UNBOOTABLE")
+        if s["priority"] == 0:
+            state = "UNBOOTABLE (priority 0)"
+        print(f"  slot {n}: priority {s['priority']:2d}  {state}{'   <- booted' if n == cur else ''}")
+    print(f"  last_boot: {'ab'[d['last_boot']] if d['last_boot'] in (0, 1) else d['last_boot']}")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--dev")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("status")
+    sub.add_parser("mark-good")
+    sub.add_parser("init")
+    arm = sub.add_parser("arm")
+    arm.add_argument("slot", choices=["a", "b"])
+    arm.add_argument("--tries", type=int, default=2)
+    args = ap.parse_args()
+
+    dev = args.dev or find_misc()
+    if args.cmd == "init":
+        d = {"a": {"priority": MAX_PRIORITY, "tries": 3, "successful": 0},
+             "b": {"priority": 0, "tries": 0, "successful": 0}, "last_boot": 0}
+        write(dev, d)
+        show(d, dev)
+        return
+
+    d = unpack(read(dev))
+    if d is None:
+        sys.exit(f"no A/B metadata at {dev}+{OFFSET} (run 'init')")
+
+    if args.cmd == "status":
+        show(d, dev)
+    elif args.cmd == "mark-good":
+        cur = current_slot()
+        if cur not in ("a", "b"):
+            sys.exit("not booted via A/B (no androidboot.slot_suffix in /proc/cmdline)")
+        d[cur].update(successful=1, tries=0)
+        d["last_boot"] = "ab".index(cur)
+        write(dev, d)
+        show(d, dev)
+    elif args.cmd == "arm":
+        if not 1 <= args.tries <= 7:
+            sys.exit("--tries must be 1..7")
+        other = "b" if args.slot == "a" else "a"
+        if not d[other]["successful"]:
+            sys.exit(f"slot {other} isn't marked good; arming {args.slot} would leave no fallback")
+        d[args.slot] = {"priority": MAX_PRIORITY, "tries": args.tries, "successful": 0}
+        d[other]["priority"] = MAX_PRIORITY - 1
+        write(dev, d)
+        show(d, dev)
+        print(f"next boot tries slot {args.slot}; after {args.tries} failed boots U-Boot falls back to {other}")
+
+
+if __name__ == "__main__":
+    main()

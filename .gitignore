@@ -1,0 +1,9 @@
+/kernel/
+/uboot/
+/rkbin/
+/r8125/
+/sd-fuse_rk3588/
+/toolbin/
+/out/
+/inputs/
+*.log
