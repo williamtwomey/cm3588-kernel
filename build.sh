@@ -1,12 +1,13 @@
 #!/bin/bash
 # CM3588 kernel build: FriendlyElec nanopi6-v6.1.y + cherry-picked stable fixes.
+unset LOCALVERSION  # kbuild appends $LOCALVERSION to CONFIG_LOCALVERSION; use KSUFFIX
 set -euo pipefail
 TOP=$(cd "$(dirname "$0")" && pwd)
 K=$TOP/kernel; OUT=$TOP/out
 export ARCH=arm64; CC=aarch64-linux-gnu-gcc-14
 MK="make -C $K ARCH=$ARCH CROSS_COMPILE=aarch64-linux-gnu- CC=$CC"
 cp "$TOP/config-6.1.118" "$K/.config"
-"$K/scripts/config" --file "$K/.config" --set-str LOCALVERSION "${LOCALVERSION:--fsfix1}" --enable IKCONFIG --enable IKCONFIG_PROC
+"$K/scripts/config" --file "$K/.config" --set-str LOCALVERSION "${KSUFFIX:--fsfix1}" --enable IKCONFIG --enable IKCONFIG_PROC
 touch "$K/.scmversion"
 $MK olddefconfig
 $MK nanopi6-images -j"$(nproc)"
