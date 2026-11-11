@@ -1,0 +1,40 @@
+From 01f4a3b9b06075e474c858481b94a223c29188c8 Mon Sep 17 00:00:00 2001
+From: Will Twomey <william.twomey@gmail.com>
+Date: Wed, 11 Nov 2026 12:19:20 -0600
+Subject: [PATCH] xfs: fix double ILOCK unlock in
+ xfs_buffered_write_iomap_begin found_cow
+
+ACK's revert of "xfs: use iomap_valid method to detect stale cached
+iomaps" (2061a2038206) restored the early xfs_iunlock(ip, XFS_ILOCK_EXCL)
+at found_cow. The 6.1.138 merge then brought "xfs: match lock mode in
+xfs_buffered_write_iomap_begin()" (0e2fcf273b67), and its resolution
+added upstream's xfs_iunlock(ip, lockmode) before each return as well.
+The COW path now drops the ILOCK twice, corrupting the rwsem, and every
+later xfs_ilock() sleeps forever.
+
+COW is only reached on shared extents (reflink=1), which overlayfs
+copy-up on XFS creates, hence Docker overlay2 hanging on chown at
+container start. Reproduced with tools/xfs-overlay-repro.sh on stock
+FriendlyElec 6.1.141: chown stuck in xfs_ilock <- xfs_map_blocks
+<- writeback <- xfs_setattr_size <- ovl_copy_up_metadata.
+
+Drop the stale early unlock so the block matches upstream 6.1.y.
+---
+ fs/xfs/xfs_iomap.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/fs/xfs/xfs_iomap.c b/fs/xfs/xfs_iomap.c
+index d029284f22e4..99af800f2953 100644
+--- a/fs/xfs/xfs_iomap.c
++++ b/fs/xfs/xfs_iomap.c
+@@ -1114,7 +1114,6 @@ xfs_buffered_write_iomap_begin(
+ 	return 0;
+ 
+ found_cow:
+-	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+ 	if (imap.br_startoff <= offset_fsb) {
+ 		error = xfs_bmbt_to_iomap(ip, srcmap, &imap, flags, 0);
+ 		if (error)
+-- 
+2.53.0
+

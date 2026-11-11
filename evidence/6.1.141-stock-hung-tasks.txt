@@ -1,0 +1,144 @@
+[  251.556309] INFO: task kworker/u16:2:73 blocked for more than 122 seconds.
+[  251.556355]       Tainted: G           O       6.1.141 #16
+[  251.556371] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+[  251.556384] task:kworker/u16:2   state:D stack:0     pid:73    ppid:2      flags:0x00000008
+[  251.556408] Workqueue: writeback wb_workfn (flush-7:8)
+[  251.556443] Call trace:
+[  251.556449]  __switch_to+0xb8/0x100
+[  251.556472]  __schedule+0x37c/0x95c
+[  251.556485]  schedule+0x50/0xe0
+[  251.556497]  io_schedule+0x40/0x5c
+[  251.556509]  folio_wait_bit_common+0x16c/0x3c4
+[  251.556525]  __folio_lock+0x20/0x28
+[  251.556535]  write_cache_pages+0x2b4/0x41c
+[  251.556553]  iomap_writepages+0x2c/0x4c
+[  251.556573]  xfs_vm_writepages+0x8c/0xc8 [xfs]
+[  251.556736]  do_writepages+0x8c/0x1c0
+[  251.556753]  __writeback_single_inode+0x48/0x3e4
+[  251.556767]  writeback_sb_inodes+0x1ec/0x478
+[  251.556781]  __writeback_inodes_wb+0x60/0x100
+[  251.556794]  wb_writeback+0x2b0/0x330
+[  251.556806]  wb_workfn+0x3bc/0x504
+[  251.556820]  process_one_work+0x1bc/0x3e0
+[  251.556833]  worker_thread+0x14c/0x3f0
+[  251.556842]  kthread+0xd8/0xe0
+[  251.556860]  ret_from_fork+0x10/0x20
+[  251.557058] INFO: task chown:3546 blocked for more than 122 seconds.
+[  251.557075]       Tainted: G           O       6.1.141 #16
+[  251.557088] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+[  251.557099] task:chown           state:D stack:0     pid:3546  ppid:3543   flags:0x00000004
+[  251.557115] Call trace:
+[  251.557121]  __switch_to+0xb8/0x100
+[  251.557135]  __schedule+0x37c/0x95c
+[  251.557147]  schedule+0x50/0xe0
+[  251.557159]  schedule_preempt_disabled+0x14/0x1c
+[  251.557173]  rwsem_down_read_slowpath+0x244/0x4a0
+[  251.557189]  down_read+0x7c/0x84
+[  251.557203]  xfs_ilock+0xd8/0xf4 [xfs]
+[  251.557350]  xfs_map_blocks+0xa0/0x394 [xfs]
+[  251.557492]  iomap_do_writepage+0x1e0/0x850
+[  251.557511]  write_cache_pages+0x1b4/0x41c
+[  251.557527]  iomap_writepages+0x2c/0x4c
+[  251.557542]  xfs_vm_writepages+0x8c/0xc8 [xfs]
+[  251.557684]  do_writepages+0x8c/0x1c0
+[  251.557700]  filemap_fdatawrite_wbc+0x80/0xc0
+[  251.557721]  __filemap_fdatawrite_range+0x64/0x98
+[  251.557733]  filemap_write_and_wait_range+0x44/0xb0
+[  251.557745]  xfs_setattr_size+0x2e0/0x380 [xfs]
+[  251.557888]  xfs_vn_setattr_size+0x54/0xa8 [xfs]
+[  251.558030]  xfs_vn_setattr+0x8c/0x160 [xfs]
+[  251.558172]  notify_change+0x1c0/0x520
+[  251.558189]  ovl_copy_up_metadata+0x238/0x320
+[  251.558210]  ovl_copy_up_one+0xa44/0x11cc
+[  251.558226]  ovl_copy_up_flags+0x7c/0x114
+[  251.558243]  ovl_copy_up+0x18/0x20
+[  251.558260]  ovl_setattr+0xa8/0x22c
+[  251.558273]  notify_change+0x1c0/0x520
+[  251.558286]  chown_common+0x268/0x2d8
+[  251.558306]  do_fchownat+0xa4/0x118
+[  251.558322]  __arm64_sys_fchownat+0x28/0x40
+[  251.558339]  invoke_syscall.constprop.0+0x44/0x100
+[  251.558358]  el0_svc_common.constprop.0+0x40/0xe0
+[  251.558374]  do_el0_svc+0x20/0x28
+[  251.558388]  el0_svc+0x14/0x48
+[  251.558398]  el0t_64_sync_handler+0x10c/0x120
+[  251.558410]  el0t_64_sync+0x14c/0x150
+[  251.558420] INFO: task chmod:3547 blocked for more than 122 seconds.
+[  251.558434]       Tainted: G           O       6.1.141 #16
+[  251.558446] "echo 0 > /proc/sys/kernel/hung_task_timeout_secs" disables this message.
+[  251.558457] task:chmod           state:D stack:0     pid:3547  ppid:3545   flags:0x00000004
+[  251.558470] Call trace:
+[  251.558474]  __switch_to+0xb8/0x100
+[  251.558487]  __schedule+0x37c/0x95c
+[  251.558499]  schedule+0x50/0xe0
+[  251.558510]  rwsem_down_write_slowpath+0x1e4/0x6a0
+[  251.558529]  down_write+0x88/0xa0
+[  251.558544]  chmod_common+0x74/0x180
+[  251.558561]  __arm64_sys_fchmodat+0x6c/0xdc
+[  251.558578]  invoke_syscall.constprop.0+0x44/0x100
+[  251.558593]  el0_svc_common.constprop.0+0x40/0xe0
+[  251.558608]  do_el0_svc+0x20/0x28
+[  251.558622]  el0_svc+0x14/0x48
+[  251.558630]  el0t_64_sync_handler+0x10c/0x120
+[  251.558640]  el0t_64_sync+0x14c/0x150
+[  374.431474] INFO: task kworker/u16:2:73 blocked for more than 245 seconds.
+
+== 73 kworker/u16:2+flush-7:8
+[<0>] folio_wait_bit_common+0x16c/0x3c4
+[<0>] __folio_lock+0x20/0x28
+[<0>] write_cache_pages+0x2b4/0x41c
+[<0>] iomap_writepages+0x2c/0x4c
+[<0>] xfs_vm_writepages+0x8c/0xc8 [xfs]
+[<0>] do_writepages+0x8c/0x1c0
+[<0>] __writeback_single_inode+0x48/0x3e4
+[<0>] writeback_sb_inodes+0x1ec/0x478
+[<0>] __writeback_inodes_wb+0x60/0x100
+[<0>] wb_writeback+0x2b0/0x330
+[<0>] wb_workfn+0x3bc/0x504
+[<0>] process_one_work+0x1bc/0x3e0
+[<0>] worker_thread+0x14c/0x3f0
+[<0>] kthread+0xd8/0xe0
+[<0>] ret_from_fork+0x10/0x20
+== 3093 xfsaild/loop8
+[<0>] xfsaild+0xd0/0x7f8 [xfs]
+[<0>] kthread+0xd8/0xe0
+[<0>] ret_from_fork+0x10/0x20
+== 3546 chown
+[<0>] xfs_ilock+0xd8/0xf4 [xfs]
+[<0>] xfs_map_blocks+0xa0/0x394 [xfs]
+[<0>] iomap_do_writepage+0x1e0/0x850
+[<0>] write_cache_pages+0x1b4/0x41c
+[<0>] iomap_writepages+0x2c/0x4c
+[<0>] xfs_vm_writepages+0x8c/0xc8 [xfs]
+[<0>] do_writepages+0x8c/0x1c0
+[<0>] filemap_fdatawrite_wbc+0x80/0xc0
+[<0>] __filemap_fdatawrite_range+0x64/0x98
+[<0>] filemap_write_and_wait_range+0x44/0xb0
+[<0>] xfs_setattr_size+0x2e0/0x380 [xfs]
+[<0>] xfs_vn_setattr_size+0x54/0xa8 [xfs]
+[<0>] xfs_vn_setattr+0x8c/0x160 [xfs]
+[<0>] notify_change+0x1c0/0x520
+[<0>] ovl_copy_up_metadata+0x238/0x320
+[<0>] ovl_copy_up_one+0xa44/0x11cc
+[<0>] ovl_copy_up_flags+0x7c/0x114
+[<0>] ovl_copy_up+0x18/0x20
+[<0>] ovl_setattr+0xa8/0x22c
+[<0>] notify_change+0x1c0/0x520
+[<0>] chown_common+0x268/0x2d8
+[<0>] do_fchownat+0xa4/0x118
+[<0>] __arm64_sys_fchownat+0x28/0x40
+[<0>] invoke_syscall.constprop.0+0x44/0x100
+[<0>] el0_svc_common.constprop.0+0x40/0xe0
+[<0>] do_el0_svc+0x20/0x28
+[<0>] el0_svc+0x14/0x48
+[<0>] el0t_64_sync_handler+0x10c/0x120
+[<0>] el0t_64_sync+0x14c/0x150
+== 3547 chmod
+[<0>] chmod_common+0x74/0x180
+[<0>] __arm64_sys_fchmodat+0x6c/0xdc
+[<0>] invoke_syscall.constprop.0+0x44/0x100
+[<0>] el0_svc_common.constprop.0+0x40/0xe0
+[<0>] do_el0_svc+0x20/0x28
+[<0>] el0_svc+0x14/0x48
+[<0>] el0t_64_sync_handler+0x10c/0x120
+[<0>] el0t_64_sync+0x14c/0x150
