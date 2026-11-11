@@ -1,0 +1,1832 @@
+3ee24426e76d4411cc8cce48b9a8b7ab45a96182
+Merge v6.1.192 into rockchip develop-6.1 (6.1.172) for CM3588
+
+Conflict resolutions:
+- Rockchip-forked drivers keep Rockchip's whole file (stable fixes target
+  the mainline versions): gpio-rockchip, rockchip_drm_vop2 (BSP VOP2),
+  spi-rockchip (drives the RK806 PMIC), ov08d10, ov8856.
+- sdhci-of-dwcmshc (eMMC): kept Rockchip's DLL output-clock handling,
+  dropping stable's "disable clock while config DLL" change, since it's
+  the root device and Rockchip's code is what runs today.
+- rockchip-iommu: kept Rockchip's pagefault fake mode.
+- mm/page_alloc: stable moved ZONE_DEVICE memmap init to mm/mm_init.c and
+  exports a 4-arg __init_single_page(); Rockchip/ACK's 5-arg static
+  version becomes __init_single_page_rk() with a 4-arg wrapper
+  (zero_page_struct=true, as Rockchip's zone-device path passed).
+- dma-heap: kept Rockchip's exported dma_heap_find/dma_heap_buffer_alloc,
+  took stable's allocate-then-fd_install-after-copy_to_user fix, dropped
+  the now-unused dma_heap_bufferfd_alloc.
+- Both sides kept: pwm-fan (Rockchip thermal notifier + stable timer
+  cleanup), dwc3 (Rockchip get_clocks + stable vbus_draw_work, ISOC
+  retries stay 50), i2c, stmmac (GET_ENTRY and NEXT_ENTRY), usb quirks,
+  pcie-rockchip-host remove, pm_domains (Rockchip ignore_pwr + stable
+  error check), u_audio (stable card private_free, plus freeing fn).
+- dwmac-rk, rockchip_pdm: Rockchip clock handling.
+- arm64 errata, mtd: stable.
+
+
+diff --git a/arch/arm64/Kconfig b/arch/arm64/Kconfig
+remerge CONFLICT (content): Merge conflict in arch/arm64/Kconfig
+index b98586a8f9aa..1b8ee28f2383 100644
+--- a/arch/arm64/Kconfig
++++ b/arch/arm64/Kconfig
+@@ -1071,10 +1071,6 @@ config ARM64_ERRATUM_3194386
+ 
+ 	  If unsure, say Y.
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+-config ARM64_ERRATUM_4118414
+-	bool "Cortex-*/Neoverse-*/C1-*: Completion of affected memory accesses might not be guaranteed by completion of a TLBI"
+-=======
+ config ARM64_ERRATUM_4193714
+ 	bool "C1-Pro: 4193714: SME DVMSync early acknowledgement"
+ 	depends on ARM64_SME
+@@ -1089,7 +1085,6 @@ config ARM64_ERRATUM_4193714
+ 
+ config ARM64_ERRATUM_4118414
+ 	bool "Various: Completion of affected memory accesses might not be guaranteed by completion of a TLBI"
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 	default y
+ 	select ARM64_WORKAROUND_REPEAT_TLBI
+ 	help
+@@ -1116,11 +1111,8 @@ config ARM64_ERRATUM_4118414
+ 	  * ARM Neoverse-V2 erratum 4193787
+ 	  * ARM Neoverse-V3 erratum 4193784
+ 	  * ARM Neoverse-V3AE erratum 4193784
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+-=======
+ 	  * Microsoft Azure Cobalt 100 4193789
+ 	  * NVIDIA Olympus erratum T410-OLY-1029
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 
+ 	  On affected cores, some memory accesses might not be completed by
+ 	  broadcast TLB invalidation.
+diff --git a/arch/arm64/kernel/cpu_errata.c b/arch/arm64/kernel/cpu_errata.c
+remerge CONFLICT (content): Merge conflict in arch/arm64/kernel/cpu_errata.c
+index a524c0222ed3..660b3ff16ebc 100644
+--- a/arch/arm64/kernel/cpu_errata.c
++++ b/arch/arm64/kernel/cpu_errata.c
+@@ -244,11 +244,8 @@ static const struct arm64_cpu_capabilities arm64_repeat_tlbi_list[] = {
+ #ifdef CONFIG_ARM64_ERRATUM_4118414
+ 	{
+ 		ERRATA_MIDR_RANGE_LIST(((const struct midr_range[]) {
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+-=======
+ 			MIDR_ALL_VERSIONS(MIDR_C1_PREMIUM),
+ 			MIDR_ALL_VERSIONS(MIDR_C1_ULTRA),
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 			MIDR_ALL_VERSIONS(MIDR_CORTEX_A76),
+ 			MIDR_ALL_VERSIONS(MIDR_CORTEX_A76AE),
+ 			MIDR_ALL_VERSIONS(MIDR_CORTEX_A77),
+@@ -268,11 +265,8 @@ static const struct arm64_cpu_capabilities arm64_repeat_tlbi_list[] = {
+ 			MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V2),
+ 			MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V3),
+ 			MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V3AE),
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+-=======
+ 			MIDR_ALL_VERSIONS(MIDR_NVIDIA_OLYMPUS),
+ 			MIDR_ALL_VERSIONS(MIDR_MICROSOFT_AZURE_COBALT_100),
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 			{}
+ 		})),
+ 	},
+diff --git a/drivers/dma-buf/dma-heap.c b/drivers/dma-buf/dma-heap.c
+remerge CONFLICT (content): Merge conflict in drivers/dma-buf/dma-heap.c
+index 5cb22917a559..94bc54b0d480 100644
+--- a/drivers/dma-buf/dma-heap.c
++++ b/drivers/dma-buf/dma-heap.c
+@@ -50,7 +50,6 @@ static dev_t dma_heap_devt;
+ static struct class *dma_heap_class;
+ static DEFINE_XARRAY_ALLOC(dma_heap_minors);
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ struct dma_heap *dma_heap_find(const char *name)
+ {
+ 	struct dma_heap *h;
+@@ -88,35 +87,6 @@ struct dma_buf *dma_heap_buffer_alloc(struct dma_heap *heap, size_t len,
+ }
+ EXPORT_SYMBOL_GPL(dma_heap_buffer_alloc);
+ 
+-static int dma_heap_bufferfd_alloc(struct dma_heap *heap, size_t len,
+-				 unsigned int fd_flags,
+-				 unsigned int heap_flags)
+-{
+-	struct dma_buf *dmabuf;
+-	int fd;
+-
+-	/*
+-	 * Allocations from all heaps have to begin
+-	 * and end on page boundaries.
+-	 */
+-	len = PAGE_ALIGN(len);
+-	if (!len)
+-		return -EINVAL;
+-
+-	dmabuf = heap->ops->allocate(heap, len, fd_flags, heap_flags);
+-	if (IS_ERR(dmabuf))
+-		return PTR_ERR(dmabuf);
+-
+-	fd = dma_buf_fd(dmabuf, fd_flags);
+-	if (fd < 0) {
+-		dma_buf_put(dmabuf);
+-		/* just return, as put will call release and that will free */
+-	}
+-	return fd;
+-}
+-
+-=======
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ static int dma_heap_open(struct inode *inode, struct file *file)
+ {
+ 	struct dma_heap *heap;
+@@ -151,13 +121,6 @@ static struct dma_buf *dma_heap_ioctl_allocate(struct file *file, void *data)
+ 	if (heap_allocation->heap_flags & ~DMA_HEAP_VALID_HEAP_FLAGS)
+ 		return ERR_PTR(-EINVAL);
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+-	fd = dma_heap_bufferfd_alloc(heap, heap_allocation->len,
+-				   heap_allocation->fd_flags,
+-				   heap_allocation->heap_flags);
+-	if (fd < 0)
+-		return fd;
+-=======
+ 	len = PAGE_ALIGN(heap_allocation->len);
+ 	if (!len)
+ 		return ERR_PTR(-EINVAL);
+@@ -173,7 +136,6 @@ static struct dma_buf *dma_heap_ioctl_allocate(struct file *file, void *data)
+ 		dma_buf_put(dmabuf);
+ 		return ERR_PTR(fd);
+ 	}
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 
+ 	heap_allocation->fd = fd;
+ 
+diff --git a/drivers/gpio/gpio-rockchip.c b/drivers/gpio/gpio-rockchip.c
+remerge CONFLICT (content): Merge conflict in drivers/gpio/gpio-rockchip.c
+index d50288abc428..f2e88a64daff 100644
+--- a/drivers/gpio/gpio-rockchip.c
++++ b/drivers/gpio/gpio-rockchip.c
+@@ -785,7 +785,6 @@ static void rockchip_gpio_get_ver(struct rockchip_pin_bank *bank)
+ {
+ 	int id = readl(bank->reg_base + gpio_regs_v2.version_id);
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	switch (id) {
+ 	case GPIO_TYPE_V2:
+ 	case GPIO_TYPE_V2_1:
+@@ -807,37 +806,6 @@ static void rockchip_gpio_get_ver(struct rockchip_pin_bank *bank)
+ 		bank->gpio_type = GPIO_TYPE_V2_7;
+ 		break;
+ 	default:
+-=======
+-	if (of_address_to_resource(bank->of_node, 0, &res)) {
+-		dev_err(bank->dev, "cannot find IO resource for bank\n");
+-		return -ENOENT;
+-	}
+-
+-	bank->reg_base = devm_ioremap_resource(bank->dev, &res);
+-	if (IS_ERR(bank->reg_base))
+-		return PTR_ERR(bank->reg_base);
+-
+-	bank->irq = irq_of_parse_and_map(bank->of_node, 0);
+-	if (!bank->irq)
+-		return -EINVAL;
+-
+-	bank->clk = devm_clk_get_enabled(bank->dev, NULL);
+-	if (IS_ERR(bank->clk))
+-		return PTR_ERR(bank->clk);
+-
+-	id = readl(bank->reg_base + gpio_regs_v2.version_id);
+-
+-	/* If not gpio v2, that is default to v1. */
+-	if (id == GPIO_TYPE_V2 || id == GPIO_TYPE_V2_1) {
+-		bank->gpio_regs = &gpio_regs_v2;
+-		bank->gpio_type = GPIO_TYPE_V2;
+-		bank->db_clk = of_clk_get(bank->of_node, 1);
+-		if (IS_ERR(bank->db_clk)) {
+-			dev_err(bank->dev, "cannot find debounce clk\n");
+-			return -EINVAL;
+-		}
+-	} else {
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 		bank->gpio_regs = &gpio_regs_v1;
+ 		bank->gpio_type = GPIO_TYPE_V1;
+ 		pr_info("Note: Use default GPIO_TYPE_V1!\n");
+@@ -1217,7 +1185,6 @@ static int rockchip_gpio_probe(struct platform_device *pdev)
+ 
+ 	ret = rockchip_gpiolib_register(bank);
+ 	if (ret) {
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 		dev_err(bank->dev, "Failed to register gpio %d\n", ret);
+ 		goto err_unlock;
+ 	}
+@@ -1231,10 +1198,6 @@ static int rockchip_gpio_probe(struct platform_device *pdev)
+ 			dev_err(bank->dev, "Failed to add pin range\n");
+ 			goto err_unlock;
+ 		}
+-=======
+-		mutex_unlock(&bank->deferred_lock);
+-		return ret;
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 	}
+ 
+ 	while (!list_empty(&bank->deferred_pins)) {
+@@ -1306,14 +1269,11 @@ static int rockchip_gpio_remove(struct platform_device *pdev)
+ 	mutex_unlock(&irq_affinity_mutex);
+ 	rockchip_gpio_remove_cpuhp();
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	clk_disable_unprepare(bank->clk);
+ 	if (bitmap_empty(bank->db_clk_bitmap, RK_GPIO_BANK_MAX_PIN))
+ 		clk_unprepare(bank->db_clk);
+ 	else
+ 		clk_disable_unprepare(bank->db_clk);
+-=======
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 	gpiochip_remove(&bank->gpio_chip);
+ 
+ 	return 0;
+diff --git a/drivers/gpu/drm/rockchip/rockchip_drm_vop2.c b/drivers/gpu/drm/rockchip/rockchip_drm_vop2.c
+remerge CONFLICT (content): Merge conflict in drivers/gpu/drm/rockchip/rockchip_drm_vop2.c
+index d424d5158258..2d74ccca41b6 100644
+--- a/drivers/gpu/drm/rockchip/rockchip_drm_vop2.c
++++ b/drivers/gpu/drm/rockchip/rockchip_drm_vop2.c
+@@ -3036,10 +3036,6 @@ static bool is_yuv_output(uint32_t bus_format)
+ 	case MEDIA_BUS_FMT_YUV8_1X24:
+ 	case MEDIA_BUS_FMT_YUV10_1X30:
+ 	case MEDIA_BUS_FMT_YUYV10_1X20:
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+-=======
+-	case MEDIA_BUS_FMT_UYVY10_1X20:
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 	case MEDIA_BUS_FMT_UYYVYY8_0_5X24:
+ 	case MEDIA_BUS_FMT_UYYVYY10_0_5X30:
+ 	case MEDIA_BUS_FMT_YUYV8_2X8:
+@@ -18719,24 +18715,7 @@ static int vop2_create_crtc(struct vop2 *vop2, uint8_t enabled_vp_mask)
+ 					     cursor->name, vp->id);
+ 		}
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 		ret = drm_crtc_init_with_planes(drm_dev, crtc, primary, cursor, &vop2_crtc_funcs,
+-=======
+-	for (i = 0; i < vop2_data->nr_vps; i++) {
+-		vp = &vop2->vps[i];
+-
+-		if (!vp->crtc.port)
+-			continue;
+-
+-		if (!vp->primary_plane)
+-			return dev_err_probe(drm->dev, -ENOENT,
+-					     "no primary plane for vp %d\n", i);
+-
+-		plane = &vp->primary_plane->base;
+-
+-		ret = drm_crtc_init_with_planes(drm, &vp->crtc, plane, NULL,
+-						&vop2_crtc_funcs,
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 						"video_port%d", vp->id);
+ 		if (ret) {
+ 			DRM_DEV_ERROR(vop2->dev, "crtc init for video_port%d failed\n", i);
+diff --git a/drivers/hwmon/pwm-fan.c b/drivers/hwmon/pwm-fan.c
+remerge CONFLICT (content): Merge conflict in drivers/hwmon/pwm-fan.c
+index c75403e7385a..559c30947269 100644
+--- a/drivers/hwmon/pwm-fan.c
++++ b/drivers/hwmon/pwm-fan.c
+@@ -480,7 +480,6 @@ static void pwm_fan_cleanup(void *__ctx)
+ 	pwm_fan_power_off(ctx);
+ }
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ static int pwm_fan_get_thermal_trips(struct device *dev, char *porp_name,
+ 				     struct thermal_trips **trips)
+ {
+@@ -567,13 +566,13 @@ static int pwm_fan_register_thermal_notifier(struct device *dev,
+ 	ctx->thermal_nb.notifier_call = pwm_fan_thermal_notifier_call;
+ 
+ 	return rockchip_system_monitor_register_notifier(&ctx->thermal_nb);
+-=======
++}
++
+ static void pwm_fan_timer_cleanup(void *__ctx)
+ {
+ 	struct pwm_fan_ctx *ctx = __ctx;
+ 
+ 	timer_shutdown_sync(&ctx->rpm_timer);
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ }
+ 
+ static int pwm_fan_probe(struct platform_device *pdev)
+diff --git a/drivers/i2c/i2c-core-base.c b/drivers/i2c/i2c-core-base.c
+remerge CONFLICT (content): Merge conflict in drivers/i2c/i2c-core-base.c
+index 3b91bc30f292..666fa81af660 100644
+--- a/drivers/i2c/i2c-core-base.c
++++ b/drivers/i2c/i2c-core-base.c
+@@ -62,11 +62,8 @@
+ static DEFINE_MUTEX(core_lock);
+ static DEFINE_IDR(i2c_adapter_idr);
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ static int i2c_check_addr_ex(struct i2c_adapter *adapter, int addr);
+-=======
+ static void i2c_deregister_clients(struct i2c_adapter *adap);
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ static int i2c_detect(struct i2c_adapter *adapter, struct i2c_driver *driver);
+ 
+ static DEFINE_STATIC_KEY_FALSE(i2c_trace_msg_key);
+diff --git a/drivers/iommu/rockchip-iommu.c b/drivers/iommu/rockchip-iommu.c
+remerge CONFLICT (content): Merge conflict in drivers/iommu/rockchip-iommu.c
+index e9bb9e661718..c4f92522d92e 100644
+--- a/drivers/iommu/rockchip-iommu.c
++++ b/drivers/iommu/rockchip-iommu.c
+@@ -84,14 +84,11 @@
+ 
+ #define DISABLE_FETCH_DTE_TIME_LIMIT BIT(31)
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ #define RK_MMU_PAGEFAULT_FAKE_MODE_EN	BIT(24)
+ #define RK_MMU_PAGEFAULT_MST0_DONE	BIT(0)
+ 
+ #define CMD_RETRY_COUNT 10
+ 
+-=======
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+  /*
+   * Support mapping any size that fits in one page table:
+   *   4 KiB to 4 MiB
+@@ -1183,14 +1180,11 @@ static int rk_iommu_enable(struct rk_iommu *iommu)
+ 	struct rk_iommu_domain *rk_domain = to_rk_domain(domain);
+ 	int ret, i;
+ 	u32 auto_gate;
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	u32 page_fault;
+ 	u32 irq_mask = RK_MMU_IRQ_MASK;
+ 
+ 	if (iommu->pf_fake_mode_en)
+ 		irq_mask |= RK_MMU_IRQ_PF_FAKE_MST0;
+-=======
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 
+ 	ret = clk_bulk_enable(iommu->num_clocks, iommu->clocks);
+ 	if (ret)
+@@ -1208,25 +1202,18 @@ static int rk_iommu_enable(struct rk_iommu *iommu)
+ 		rk_iommu_write(iommu->bases[i], RK_MMU_DTE_ADDR,
+ 			       rk_ops->mk_dtentries(rk_domain->dt_dma));
+ 		rk_iommu_base_command(iommu->bases[i], RK_MMU_CMD_ZAP_CACHE);
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 		rk_iommu_write(iommu->bases[i], RK_MMU_INT_MASK, irq_mask);
+-=======
+-		rk_iommu_write(iommu->bases[i], RK_MMU_INT_MASK, RK_MMU_IRQ_MASK);
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 
+ 		/* Workaround for iommu blocked, BIT(31) default to 1 */
+ 		auto_gate = rk_iommu_read(iommu->bases[i], RK_MMU_AUTO_GATING);
+ 		auto_gate |= DISABLE_FETCH_DTE_TIME_LIMIT;
+ 		rk_iommu_write(iommu->bases[i], RK_MMU_AUTO_GATING, auto_gate);
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 
+ 		if (iommu->pf_fake_mode_en) {
+ 			page_fault = rk_iommu_read(iommu->bases[i], RK_MMU_PAGE_FAULT);
+ 			page_fault |= RK_MMU_PAGEFAULT_FAKE_MODE_EN;
+ 			rk_iommu_write(iommu->bases[i], RK_MMU_PAGE_FAULT, page_fault);
+ 		}
+-=======
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 	}
+ 
+ 	ret = rk_iommu_enable_paging(iommu);
+diff --git a/drivers/media/i2c/ov08d10.c b/drivers/media/i2c/ov08d10.c
+remerge CONFLICT (content): Merge conflict in drivers/media/i2c/ov08d10.c
+index 75fdab3012ee..c0bf0aa8e973 100644
+--- a/drivers/media/i2c/ov08d10.c
++++ b/drivers/media/i2c/ov08d10.c
+@@ -117,433 +117,11 @@ struct ov08d10_mode {
+ 	struct v4l2_fract max_fps;
+ 	u32 hts_def;
+ 	u32 vts_def;
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	u32 exp_def;
+ 	u32 mipi_freq_idx;
+ 	const struct regval *global_reg_list;
+ 	const struct regval *reg_list;
+ 	u32 vc[PAD_MAX];
+-=======
+-
+-	/* Min vertical timining size */
+-	u32 vts_min;
+-
+-	/* Link frequency needed for this resolution */
+-	u32 link_freq_index;
+-
+-	/* Sensor register settings for this resolution */
+-	const struct ov08d10_reg_list reg_list;
+-
+-	/* Number of data lanes */
+-	u8 data_lanes;
+-};
+-
+-/* 3280x2460, 3264x2448 need 720Mbps/lane, 2 lanes */
+-static const struct ov08d10_reg mipi_data_rate_720mbps[] = {
+-	{0xfd, 0x00},
+-	{0x11, 0x2a},
+-	{0x14, 0x43},
+-	{0x1a, 0x04},
+-	{0x1b, 0xe1},
+-	{0x1e, 0x13},
+-	{0xb7, 0x02}
+-};
+-
+-/* 1632x1224 needs 360Mbps/lane, 2 lanes */
+-static const struct ov08d10_reg mipi_data_rate_360mbps[] = {
+-	{0xfd, 0x00},
+-	{0x1a, 0x04},
+-	{0x1b, 0xe1},
+-	{0x1d, 0x00},
+-	{0x1c, 0x19},
+-	{0x11, 0x2a},
+-	{0x14, 0x54},
+-	{0x1e, 0x13},
+-	{0xb7, 0x02}
+-};
+-
+-static const struct ov08d10_reg lane_2_mode_3280x2460[] = {
+-	/* 3280x2460 resolution */
+-	{0xfd, 0x01},
+-	{0x12, 0x00},
+-	{0x03, 0x12},
+-	{0x04, 0x58},
+-	{0x07, 0x05},
+-	{0x21, 0x02},
+-	{0x24, 0x30},
+-	{0x33, 0x03},
+-	{0x01, 0x03},
+-	{0x19, 0x10},
+-	{0x42, 0x55},
+-	{0x43, 0x00},
+-	{0x47, 0x07},
+-	{0x48, 0x08},
+-	{0xb2, 0x7f},
+-	{0xb3, 0x7b},
+-	{0xbd, 0x08},
+-	{0xd2, 0x57},
+-	{0xd3, 0x10},
+-	{0xd4, 0x08},
+-	{0xd5, 0x08},
+-	{0xd6, 0x06},
+-	{0xb1, 0x00},
+-	{0xb4, 0x00},
+-	{0xb7, 0x0a},
+-	{0xbc, 0x44},
+-	{0xbf, 0x48},
+-	{0xc1, 0x10},
+-	{0xc3, 0x24},
+-	{0xc8, 0x03},
+-	{0xc9, 0xf8},
+-	{0xe1, 0x33},
+-	{0xe2, 0xbb},
+-	{0x51, 0x0c},
+-	{0x52, 0x0a},
+-	{0x57, 0x8c},
+-	{0x59, 0x09},
+-	{0x5a, 0x08},
+-	{0x5e, 0x10},
+-	{0x60, 0x02},
+-	{0x6d, 0x5c},
+-	{0x76, 0x16},
+-	{0x7c, 0x11},
+-	{0x90, 0x28},
+-	{0x91, 0x16},
+-	{0x92, 0x1c},
+-	{0x93, 0x24},
+-	{0x95, 0x48},
+-	{0x9c, 0x06},
+-	{0xca, 0x0c},
+-	{0xce, 0x0d},
+-	{0xfd, 0x01},
+-	{0xc0, 0x00},
+-	{0xdd, 0x18},
+-	{0xde, 0x19},
+-	{0xdf, 0x32},
+-	{0xe0, 0x70},
+-	{0xfd, 0x01},
+-	{0xc2, 0x05},
+-	{0xd7, 0x88},
+-	{0xd8, 0x77},
+-	{0xd9, 0x00},
+-	{0xfd, 0x07},
+-	{0x00, 0xf8},
+-	{0x01, 0x2b},
+-	{0x05, 0x40},
+-	{0x08, 0x06},
+-	{0x09, 0x11},
+-	{0x28, 0x6f},
+-	{0x2a, 0x20},
+-	{0x2b, 0x05},
+-	{0x5e, 0x10},
+-	{0x52, 0x00},
+-	{0x53, 0x7c},
+-	{0x54, 0x00},
+-	{0x55, 0x7c},
+-	{0x56, 0x00},
+-	{0x57, 0x7c},
+-	{0x58, 0x00},
+-	{0x59, 0x7c},
+-	{0xfd, 0x02},
+-	{0x9a, 0x30},
+-	{0xa8, 0x02},
+-	{0xfd, 0x02},
+-	{0xa1, 0x00},
+-	{0xa2, 0x09},
+-	{0xa3, 0x9c},
+-	{0xa5, 0x00},
+-	{0xa6, 0x0c},
+-	{0xa7, 0xd0},
+-	{0xfd, 0x00},
+-	{0x24, 0x01},
+-	{0xc0, 0x16},
+-	{0xc1, 0x08},
+-	{0xc2, 0x30},
+-	{0x8e, 0x0c},
+-	{0x8f, 0xd0},
+-	{0x90, 0x09},
+-	{0x91, 0x9c},
+-	{0xfd, 0x05},
+-	{0x04, 0x40},
+-	{0x07, 0x00},
+-	{0x0d, 0x01},
+-	{0x0f, 0x01},
+-	{0x10, 0x00},
+-	{0x11, 0x00},
+-	{0x12, 0x0c},
+-	{0x13, 0xcf},
+-	{0x14, 0x00},
+-	{0x15, 0x00},
+-	{0xfd, 0x00},
+-	{0x20, 0x0f},
+-	{0xe7, 0x03},
+-	{0xe7, 0x00}
+-};
+-
+-static const struct ov08d10_reg lane_2_mode_3264x2448[] = {
+-	/* 3264x2448 resolution */
+-	{0xfd, 0x01},
+-	{0x12, 0x00},
+-	{0x03, 0x12},
+-	{0x04, 0x58},
+-	{0x07, 0x05},
+-	{0x21, 0x02},
+-	{0x24, 0x30},
+-	{0x33, 0x03},
+-	{0x01, 0x03},
+-	{0x19, 0x10},
+-	{0x42, 0x55},
+-	{0x43, 0x00},
+-	{0x47, 0x07},
+-	{0x48, 0x08},
+-	{0xb2, 0x7f},
+-	{0xb3, 0x7b},
+-	{0xbd, 0x08},
+-	{0xd2, 0x57},
+-	{0xd3, 0x10},
+-	{0xd4, 0x08},
+-	{0xd5, 0x08},
+-	{0xd6, 0x06},
+-	{0xb1, 0x00},
+-	{0xb4, 0x00},
+-	{0xb7, 0x0a},
+-	{0xbc, 0x44},
+-	{0xbf, 0x48},
+-	{0xc1, 0x10},
+-	{0xc3, 0x24},
+-	{0xc8, 0x03},
+-	{0xc9, 0xf8},
+-	{0xe1, 0x33},
+-	{0xe2, 0xbb},
+-	{0x51, 0x0c},
+-	{0x52, 0x0a},
+-	{0x57, 0x8c},
+-	{0x59, 0x09},
+-	{0x5a, 0x08},
+-	{0x5e, 0x10},
+-	{0x60, 0x02},
+-	{0x6d, 0x5c},
+-	{0x76, 0x16},
+-	{0x7c, 0x11},
+-	{0x90, 0x28},
+-	{0x91, 0x16},
+-	{0x92, 0x1c},
+-	{0x93, 0x24},
+-	{0x95, 0x48},
+-	{0x9c, 0x06},
+-	{0xca, 0x0c},
+-	{0xce, 0x0d},
+-	{0xfd, 0x01},
+-	{0xc0, 0x00},
+-	{0xdd, 0x18},
+-	{0xde, 0x19},
+-	{0xdf, 0x32},
+-	{0xe0, 0x70},
+-	{0xfd, 0x01},
+-	{0xc2, 0x05},
+-	{0xd7, 0x88},
+-	{0xd8, 0x77},
+-	{0xd9, 0x00},
+-	{0xfd, 0x07},
+-	{0x00, 0xf8},
+-	{0x01, 0x2b},
+-	{0x05, 0x40},
+-	{0x08, 0x06},
+-	{0x09, 0x11},
+-	{0x28, 0x6f},
+-	{0x2a, 0x20},
+-	{0x2b, 0x05},
+-	{0x5e, 0x10},
+-	{0x52, 0x00},
+-	{0x53, 0x7c},
+-	{0x54, 0x00},
+-	{0x55, 0x7c},
+-	{0x56, 0x00},
+-	{0x57, 0x7c},
+-	{0x58, 0x00},
+-	{0x59, 0x7c},
+-	{0xfd, 0x02},
+-	{0x9a, 0x30},
+-	{0xa8, 0x02},
+-	{0xfd, 0x02},
+-	{0xa1, 0x08},
+-	{0xa2, 0x09},
+-	{0xa3, 0x90},
+-	{0xa5, 0x08},
+-	{0xa6, 0x0c},
+-	{0xa7, 0xc0},
+-	{0xfd, 0x00},
+-	{0x24, 0x01},
+-	{0xc0, 0x16},
+-	{0xc1, 0x08},
+-	{0xc2, 0x30},
+-	{0x8e, 0x0c},
+-	{0x8f, 0xc0},
+-	{0x90, 0x09},
+-	{0x91, 0x90},
+-	{0xfd, 0x05},
+-	{0x04, 0x40},
+-	{0x07, 0x00},
+-	{0x0d, 0x01},
+-	{0x0f, 0x01},
+-	{0x10, 0x00},
+-	{0x11, 0x00},
+-	{0x12, 0x0c},
+-	{0x13, 0xcf},
+-	{0x14, 0x00},
+-	{0x15, 0x00},
+-	{0xfd, 0x00},
+-	{0x20, 0x0f},
+-	{0xe7, 0x03},
+-	{0xe7, 0x00}
+-};
+-
+-static const struct ov08d10_reg lane_2_mode_1632x1224[] = {
+-	/* 1640x1232 resolution */
+-	{0xfd, 0x01},
+-	{0x1a, 0x0a},
+-	{0x1b, 0x08},
+-	{0x2a, 0x01},
+-	{0x2b, 0x9a},
+-	{0xfd, 0x01},
+-	{0x12, 0x00},
+-	{0x03, 0x05},
+-	{0x04, 0xe2},
+-	{0x07, 0x05},
+-	{0x21, 0x02},
+-	{0x24, 0x30},
+-	{0x33, 0x03},
+-	{0x31, 0x06},
+-	{0x33, 0x03},
+-	{0x01, 0x03},
+-	{0x19, 0x10},
+-	{0x42, 0x55},
+-	{0x43, 0x00},
+-	{0x47, 0x07},
+-	{0x48, 0x08},
+-	{0xb2, 0x7f},
+-	{0xb3, 0x7b},
+-	{0xbd, 0x08},
+-	{0xd2, 0x57},
+-	{0xd3, 0x10},
+-	{0xd4, 0x08},
+-	{0xd5, 0x08},
+-	{0xd6, 0x06},
+-	{0xb1, 0x00},
+-	{0xb4, 0x00},
+-	{0xb7, 0x0a},
+-	{0xbc, 0x44},
+-	{0xbf, 0x48},
+-	{0xc1, 0x10},
+-	{0xc3, 0x24},
+-	{0xc8, 0x03},
+-	{0xc9, 0xf8},
+-	{0xe1, 0x33},
+-	{0xe2, 0xbb},
+-	{0x51, 0x0c},
+-	{0x52, 0x0a},
+-	{0x57, 0x8c},
+-	{0x59, 0x09},
+-	{0x5a, 0x08},
+-	{0x5e, 0x10},
+-	{0x60, 0x02},
+-	{0x6d, 0x5c},
+-	{0x76, 0x16},
+-	{0x7c, 0x1a},
+-	{0x90, 0x28},
+-	{0x91, 0x16},
+-	{0x92, 0x1c},
+-	{0x93, 0x24},
+-	{0x95, 0x48},
+-	{0x9c, 0x06},
+-	{0xca, 0x0c},
+-	{0xce, 0x0d},
+-	{0xfd, 0x01},
+-	{0xc0, 0x00},
+-	{0xdd, 0x18},
+-	{0xde, 0x19},
+-	{0xdf, 0x32},
+-	{0xe0, 0x70},
+-	{0xfd, 0x01},
+-	{0xc2, 0x05},
+-	{0xd7, 0x88},
+-	{0xd8, 0x77},
+-	{0xd9, 0x00},
+-	{0xfd, 0x07},
+-	{0x00, 0xf8},
+-	{0x01, 0x2b},
+-	{0x05, 0x40},
+-	{0x08, 0x03},
+-	{0x09, 0x08},
+-	{0x28, 0x6f},
+-	{0x2a, 0x20},
+-	{0x2b, 0x05},
+-	{0x2c, 0x01},
+-	{0x50, 0x02},
+-	{0x51, 0x03},
+-	{0x5e, 0x00},
+-	{0x52, 0x00},
+-	{0x53, 0x7c},
+-	{0x54, 0x00},
+-	{0x55, 0x7c},
+-	{0x56, 0x00},
+-	{0x57, 0x7c},
+-	{0x58, 0x00},
+-	{0x59, 0x7c},
+-	{0xfd, 0x02},
+-	{0x9a, 0x30},
+-	{0xa8, 0x02},
+-	{0xfd, 0x02},
+-	{0xa9, 0x04},
+-	{0xaa, 0xd0},
+-	{0xab, 0x06},
+-	{0xac, 0x68},
+-	{0xa1, 0x04},
+-	{0xa2, 0x04},
+-	{0xa3, 0xc8},
+-	{0xa5, 0x04},
+-	{0xa6, 0x06},
+-	{0xa7, 0x60},
+-	{0xfd, 0x05},
+-	{0x06, 0x80},
+-	{0x18, 0x06},
+-	{0x19, 0x68},
+-	{0xfd, 0x00},
+-	{0x24, 0x01},
+-	{0xc0, 0x16},
+-	{0xc1, 0x08},
+-	{0xc2, 0x30},
+-	{0x8e, 0x06},
+-	{0x8f, 0x60},
+-	{0x90, 0x04},
+-	{0x91, 0xc8},
+-	{0x93, 0x0e},
+-	{0x94, 0x77},
+-	{0x95, 0x77},
+-	{0x96, 0x10},
+-	{0x98, 0x88},
+-	{0x9c, 0x1a},
+-	{0xfd, 0x05},
+-	{0x04, 0x40},
+-	{0x07, 0x99},
+-	{0x0d, 0x03},
+-	{0x0f, 0x03},
+-	{0x10, 0x00},
+-	{0x11, 0x00},
+-	{0x12, 0x0c},
+-	{0x13, 0xcf},
+-	{0x14, 0x00},
+-	{0x15, 0x00},
+-	{0xfd, 0x00},
+-	{0x20, 0x0f},
+-	{0xe7, 0x03},
+-	{0xe7, 0x00},
+-};
+-
+-static const char * const ov08d10_test_pattern_menu[] = {
+-	"Disabled",
+-	"Standard Color Bar",
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ };
+ 
+ struct ov08d10 {
+@@ -774,57 +352,8 @@ static const s64 link_freq_menu_items[] = {
+ /* Write registers up to 4 at a time */
+ static int ov08d10_write_reg(struct i2c_client *client, u8 reg, u8 val)
+ {
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	struct i2c_msg msg;
+ 	u8 buf[2];
+-=======
+-	static const u32 codes[2][2] = {
+-		{ MEDIA_BUS_FMT_SBGGR10_1X10, MEDIA_BUS_FMT_SGBRG10_1X10 },
+-		{ MEDIA_BUS_FMT_SGRBG10_1X10, MEDIA_BUS_FMT_SRGGB10_1X10 },
+-	};
+-
+-	return codes[ov08d10->vflip->val][ov08d10->hflip->val];
+-}
+-
+-static unsigned int ov08d10_modes_num(const struct ov08d10 *ov08d10)
+-{
+-	unsigned int i, count = 0;
+-
+-	for (i = 0; i < ARRAY_SIZE(ov08d10->priv_lane->sp_modes); i++) {
+-		if (ov08d10->priv_lane->sp_modes[i].width == 0)
+-			break;
+-		count++;
+-	}
+-
+-	return count;
+-}
+-
+-static u64 to_rate(const s64 *link_freq_menu,
+-		   u32 f_index, u8 nlanes)
+-{
+-	u64 pixel_rate = link_freq_menu[f_index] * 2 * nlanes;
+-
+-	do_div(pixel_rate, OV08D10_RGB_DEPTH);
+-
+-	return pixel_rate;
+-}
+-
+-static u64 to_pixels_per_line(const s64 *link_freq_menu, u32 hts,
+-			      u32 f_index, u8 nlanes)
+-{
+-	u64 ppl = hts * to_rate(link_freq_menu, f_index, nlanes);
+-
+-	do_div(ppl, OV08D10_SCLK);
+-
+-	return ppl;
+-}
+-
+-static int ov08d10_write_reg_list(struct ov08d10 *ov08d10,
+-				  const struct ov08d10_reg_list *r_list)
+-{
+-	struct i2c_client *client = v4l2_get_subdevdata(&ov08d10->sd);
+-	unsigned int i;
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 	int ret;
+ 
+ 	buf[0] = reg & 0xFF;
+diff --git a/drivers/media/i2c/ov8856.c b/drivers/media/i2c/ov8856.c
+remerge CONFLICT (content): Merge conflict in drivers/media/i2c/ov8856.c
+index 251d922a0cce..f5a3e89d6a59 100644
+--- a/drivers/media/i2c/ov8856.c
++++ b/drivers/media/i2c/ov8856.c
+@@ -1737,38 +1737,11 @@ static int ov8856_initialize_controls(struct ov8856 *ov8856)
+ 	if (ov8856->hblank)
+ 		ov8856->hblank->flags |= V4L2_CTRL_FLAG_READ_ONLY;
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	vblank_def = mode->vts_def - mode->height;
+ 	ov8856->vblank = v4l2_ctrl_new_std(handler, &ov8856_ctrl_ops,
+ 				V4L2_CID_VBLANK, vblank_def,
+ 				OV8856_VTS_MAX - mode->height,
+ 				1, vblank_def);
+-=======
+-	v4l2_ctrl_new_std(ctrl_hdlr, &ov8856_ctrl_ops, V4L2_CID_ANALOGUE_GAIN,
+-			  OV8856_ANAL_GAIN_MIN, OV8856_ANAL_GAIN_MAX,
+-			  OV8856_ANAL_GAIN_STEP, OV8856_ANAL_GAIN_MIN);
+-	v4l2_ctrl_new_std(ctrl_hdlr, &ov8856_ctrl_ops, V4L2_CID_DIGITAL_GAIN,
+-			  OV8856_DGTL_GAIN_MIN, OV8856_DGTL_GAIN_MAX,
+-			  OV8856_DGTL_GAIN_STEP, OV8856_DGTL_GAIN_DEFAULT);
+-	exposure_max = ov8856->cur_mode->vts_def - OV8856_EXPOSURE_MAX_MARGIN;
+-	ov8856->exposure = v4l2_ctrl_new_std(ctrl_hdlr, &ov8856_ctrl_ops,
+-					     V4L2_CID_EXPOSURE,
+-					     OV8856_EXPOSURE_MIN, exposure_max,
+-					     OV8856_EXPOSURE_STEP,
+-					     exposure_max);
+-	v4l2_ctrl_new_std_menu_items(ctrl_hdlr, &ov8856_ctrl_ops,
+-				     V4L2_CID_TEST_PATTERN,
+-				     ARRAY_SIZE(ov8856_test_pattern_menu) - 1,
+-				     0, 0, ov8856_test_pattern_menu);
+-	v4l2_ctrl_new_std(ctrl_hdlr, &ov8856_ctrl_ops,
+-			  V4L2_CID_HFLIP, 0, 1, 1, 0);
+-	v4l2_ctrl_new_std(ctrl_hdlr, &ov8856_ctrl_ops,
+-			  V4L2_CID_VFLIP, 0, 1, 1, 0);
+-	if (ctrl_hdlr->error) {
+-		ret = ctrl_hdlr->error;
+-		goto err_ctrl_handler_free;
+-	}
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 
+ 	exposure_max = mode->vts_def - 6;
+ 	ov8856->exposure = v4l2_ctrl_new_std(handler, &ov8856_ctrl_ops,
+@@ -1801,14 +1774,6 @@ static int ov8856_initialize_controls(struct ov8856 *ov8856)
+ 	ov8856->subdev.ctrl_handler = handler;
+ 
+ 	return 0;
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+-=======
+-
+-err_ctrl_handler_free:
+-	v4l2_ctrl_handler_free(ctrl_hdlr);
+-	return ret;
+-}
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 
+ err_free_handler:
+ 	v4l2_ctrl_handler_free(handler);
+diff --git a/drivers/mmc/host/sdhci-of-dwcmshc.c b/drivers/mmc/host/sdhci-of-dwcmshc.c
+remerge CONFLICT (content): Merge conflict in drivers/mmc/host/sdhci-of-dwcmshc.c
+index 38ee62a26c80..5ef9fcc01743 100644
+--- a/drivers/mmc/host/sdhci-of-dwcmshc.c
++++ b/drivers/mmc/host/sdhci-of-dwcmshc.c
+@@ -431,11 +431,7 @@ static void dwcmshc_rk3568_set_clock(struct sdhci_host *host, unsigned int clock
+ 	extra |= BIT(4);
+ 	sdhci_writel(host, extra, reg);
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	/* Disable output clock while config DLL */
+-=======
+-	/* Disable clock while config DLL */
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 	sdhci_writew(host, 0, SDHCI_CLOCK_CONTROL);
+ 
+ 	if (clock <= 52000000) {
+@@ -445,11 +441,7 @@ static void dwcmshc_rk3568_set_clock(struct sdhci_host *host, unsigned int clock
+ 		    host->mmc->ios.timing == MMC_TIMING_MMC_HS400) {
+ 			dev_err(mmc_dev(host->mmc),
+ 				"Can't reduce the clock below 52MHz in HS200/HS400 mode");
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 			goto exit;
+-=======
+-			goto enable_clk;
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 		}
+ 
+ 		/*
+@@ -469,11 +461,7 @@ static void dwcmshc_rk3568_set_clock(struct sdhci_host *host, unsigned int clock
+ 			DLL_STRBIN_DELAY_NUM_SEL |
+ 			drv_data->ddr50_strbin_delay_num << DLL_STRBIN_DELAY_NUM_OFFSET;
+ 		sdhci_writel(host, extra, DWCMSHC_EMMC_DLL_STRBIN);
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 		goto exit;
+-=======
+-		goto enable_clk;
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 	}
+ 
+ 	/* Reset DLL */
+@@ -493,11 +481,7 @@ static void dwcmshc_rk3568_set_clock(struct sdhci_host *host, unsigned int clock
+ 				 500 * USEC_PER_MSEC);
+ 	if (err) {
+ 		dev_err(mmc_dev(host->mmc), "DLL lock timeout!\n");
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 		goto exit;
+-=======
+-		goto enable_clk;
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 	}
+ 
+ 	dll_lock_value = ((sdhci_readl(host, DWCMSHC_EMMC_DLL_STATUS0) & 0xFF) * 2) & 0xFF;
+@@ -544,19 +528,8 @@ static void dwcmshc_rk3568_set_clock(struct sdhci_host *host, unsigned int clock
+ 		extra |= DLL_TAP_VALUE_SEL | dll_lock_value << DLL_TAP_VALUE_OFFSET;
+ 	sdhci_writel(host, extra, DWCMSHC_EMMC_DLL_STRBIN);
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ exit:
+ 	/* enable output clock */
+-=======
+-enable_clk:
+-	/*
+-	 * The sdclk frequency select bits in SDHCI_CLOCK_CONTROL are not functional
+-	 * on Rockchip's SDHCI implementation. Instead, the clock frequency is fully
+-	 * controlled via external clk provider by calling clk_set_rate(). Consequently,
+-	 * passing 0 to sdhci_enable_clk() only re-enables the already-configured clock,
+-	 * which matches the hardware's actual behavior.
+-	 */
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 	sdhci_enable_clk(host, 0);
+ }
+ 
+diff --git a/drivers/mtd/mtdcore.c b/drivers/mtd/mtdcore.c
+remerge CONFLICT (content): Merge conflict in drivers/mtd/mtdcore.c
+index 685ff5a18a78..de2167952844 100644
+--- a/drivers/mtd/mtdcore.c
++++ b/drivers/mtd/mtdcore.c
+@@ -102,8 +102,6 @@ static void mtd_release(struct device *dev)
+ 	device_destroy(&mtd_class, index + 1);
+ }
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+-=======
+ /*
+  * No-op device release used in add_mtd_device() error paths.
+  * Prevents mtd_release() from being called via device_release(),
+@@ -113,7 +111,6 @@ static void mtd_dev_release_nop(struct device *dev)
+ {
+ }
+ 
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ static void mtd_device_release(struct kref *kref)
+ {
+ 	struct mtd_info *mtd = container_of(kref, struct mtd_info, refcnt);
+@@ -1234,11 +1231,7 @@ int __get_mtd_device(struct mtd_info *mtd)
+ 	int err;
+ 
+ 	if (master->_get_device) {
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+-		err = master->_get_device(mtd);
+-=======
+ 		err = master->_get_device(master);
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 		if (err)
+ 			return err;
+ 	}
+diff --git a/drivers/net/ethernet/stmicro/stmmac/common.h b/drivers/net/ethernet/stmicro/stmmac/common.h
+remerge CONFLICT (content): Merge conflict in drivers/net/ethernet/stmicro/stmmac/common.h
+index a059d5cec6d4..ca6a45b72bac 100644
+--- a/drivers/net/ethernet/stmicro/stmmac/common.h
++++ b/drivers/net/ethernet/stmicro/stmmac/common.h
+@@ -60,12 +60,9 @@
+ #define DMA_DEFAULT_RX_SIZE	1024
+ #else
+ #define DMA_DEFAULT_RX_SIZE	512
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ #endif
+ #define STMMAC_GET_ENTRY(x, size)	((x + 1) & (size - 1))
+-=======
+ #define STMMAC_NEXT_ENTRY(x, size)	((x + 1) & (size - 1))
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 
+ #undef FRAME_FILTER_DEBUG
+ /* #define FRAME_FILTER_DEBUG */
+diff --git a/drivers/net/ethernet/stmicro/stmmac/dwmac-rk.c b/drivers/net/ethernet/stmicro/stmmac/dwmac-rk.c
+remerge CONFLICT (content): Merge conflict in drivers/net/ethernet/stmicro/stmmac/dwmac-rk.c
+index f2a9a00f00f1..57c352f253fd 100644
+--- a/drivers/net/ethernet/stmicro/stmmac/dwmac-rk.c
++++ b/drivers/net/ethernet/stmicro/stmmac/dwmac-rk.c
+@@ -3047,7 +3047,6 @@ static int gmac_clk_enable(struct rk_priv_data *bsp_priv, bool enable)
+ 					clk_prepare_enable(
+ 						bsp_priv->mac_clk_rx);
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 				if (!IS_ERR(bsp_priv->clk_mac_ref))
+ 					clk_prepare_enable(
+ 						bsp_priv->clk_mac_ref);
+@@ -3077,14 +3076,6 @@ static int gmac_clk_enable(struct rk_priv_data *bsp_priv, bool enable)
+ 
+ 			if (!IS_ERR(bsp_priv->clk_xpcs_eee))
+ 				clk_prepare_enable(bsp_priv->clk_xpcs_eee);
+-=======
+-			ret = clk_prepare_enable(bsp_priv->clk_phy);
+-			if (ret) {
+-				clk_bulk_disable_unprepare(bsp_priv->num_clks,
+-							   bsp_priv->clks);
+-				return ret;
+-			}
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 
+ 			if (bsp_priv->ops && bsp_priv->ops->set_clock_selection)
+ 				bsp_priv->ops->set_clock_selection(bsp_priv,
+diff --git a/drivers/pci/controller/pcie-rockchip-host.c b/drivers/pci/controller/pcie-rockchip-host.c
+remerge CONFLICT (content): Merge conflict in drivers/pci/controller/pcie-rockchip-host.c
+index b4af901cd969..991818fd0b18 100644
+--- a/drivers/pci/controller/pcie-rockchip-host.c
++++ b/drivers/pci/controller/pcie-rockchip-host.c
+@@ -1245,16 +1245,13 @@ static int rockchip_pcie_remove(struct platform_device *pdev)
+ 	u32 status;
+ 	struct pci_host_bridge *bridge = pci_host_bridge_from_priv(rockchip);
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	status1 = rockchip_pcie_read(rockchip, PCIE_CLIENT_BASIC_STATUS1);
+ 	status2 = rockchip_pcie_read(rockchip, PCIE_CLIENT_DEBUG_OUT_0);
+ 
+ 	if (!PCIE_LINK_UP(status1) || !PCIE_LINK_IS_L0(status2))
+ 		rockchip->in_remove = 1;
+ 
+-=======
+ 	pci_lock_rescan_remove();
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 	pci_stop_root_bus(bridge->bus);
+ 	pci_remove_root_bus(bridge->bus);
+ 	pci_unlock_rescan_remove();
+diff --git a/drivers/soc/rockchip/pm_domains.c b/drivers/soc/rockchip/pm_domains.c
+remerge CONFLICT (content): Merge conflict in drivers/soc/rockchip/pm_domains.c
+index b38a48204565..89789143087c 100644
+--- a/drivers/soc/rockchip/pm_domains.c
++++ b/drivers/soc/rockchip/pm_domains.c
+@@ -1865,7 +1865,6 @@ static int rockchip_pm_add_subdomain(struct rockchip_pmu *pmu,
+ 				parent_domain->name, child_domain->name);
+ 		}
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 		/*
+ 		 * If child_pd doesn't do idle request or power on/off,
+ 		 * parent_pd may fail to do power on/off, so if parent_pd
+@@ -1877,12 +1876,9 @@ static int rockchip_pm_add_subdomain(struct rockchip_pmu *pmu,
+ 		if (!parent_pd->is_ignore_pwr)
+ 			child_pd->is_ignore_pwr = false;
+ 
+-		rockchip_pm_add_subdomain(pmu, np);
+-=======
+ 		error = rockchip_pm_add_subdomain(pmu, np);
+ 		if (error)
+ 			goto err_out;
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 	}
+ 
+ 	return 0;
+diff --git a/drivers/spi/spi-rockchip.c b/drivers/spi/spi-rockchip.c
+remerge CONFLICT (content): Merge conflict in drivers/spi/spi-rockchip.c
+index 4b489b5bc25b..197d32055892 100644
+--- a/drivers/spi/spi-rockchip.c
++++ b/drivers/spi/spi-rockchip.c
+@@ -108,8 +108,8 @@
+ #define CR0_XFM_RO					0x2
+ 
+ #define CR0_OPM_OFFSET				20
+-#define CR0_OPM_HOST				0x0
+-#define CR0_OPM_TARGET				0x1
++#define CR0_OPM_MASTER				0x0
++#define CR0_OPM_SLAVE				0x1
+ 
+ #define CR0_SOI_OFFSET				23
+ 
+@@ -129,7 +129,7 @@
+ #define SR_TF_EMPTY					(1 << 2)
+ #define SR_RF_EMPTY					(1 << 3)
+ #define SR_RF_FULL					(1 << 4)
+-#define SR_TARGET_TX_BUSY				(1 << 5)
++#define SR_SLAVE_TX_BUSY				(1 << 5)
+ 
+ /* Bit fields in ISR, IMR, ISR, RISR, 5bit */
+ #define INT_MASK					0x1f
+@@ -155,7 +155,7 @@
+ #define RXDMA					(1 << 0)
+ #define TXDMA					(1 << 1)
+ 
+-/* sclk_out: spi host internal logic in rk3x can support 50Mhz */
++/* sclk_out: spi master internal logic in rk3x can support 50Mhz */
+ #define MAX_SCLK_OUT				50000000U
+ /* max sclk of driver strength 4mA */
+ #define IO_DRIVER_4MA_MAX_SCLK_OUT	24000000U
+@@ -222,14 +222,9 @@ struct rockchip_spi {
+ 
+ 	bool cs_asserted[ROCKCHIP_SPI_MAX_CS_NUM];
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	struct pinctrl_state *high_speed_state;
+ 	bool slave_aborted;
+ 	bool cs_inactive; /* spi slave tansmition stop when cs inactive */
+-=======
+-	bool target_abort;
+-	bool cs_inactive; /* spi target tansmition stop when cs inactive */
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 	bool cs_high_supported; /* native CS supports active-high polarity */
+ 	struct gpio_desc *ready; /* spi slave transmission ready */
+ 
+@@ -246,7 +241,7 @@ static inline void spi_enable_chip(struct rockchip_spi *rs, bool enable)
+ 	writel_relaxed((enable ? 1U : 0U), rs->regs + ROCKCHIP_SPI_SSIENR);
+ }
+ 
+-static inline void wait_for_tx_idle(struct rockchip_spi *rs, bool target_mode)
++static inline void wait_for_tx_idle(struct rockchip_spi *rs, bool slave_mode)
+ {
+ 	unsigned long timeout = jiffies + msecs_to_jiffies(5);
+ 	u32 bit_field = SR_BUSY;
+@@ -262,7 +257,6 @@ static inline void wait_for_tx_idle(struct rockchip_spi *rs, bool target_mode)
+ 	}
+ 
+ 	do {
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 		if ((readl_relaxed(rs->regs + ROCKCHIP_SPI_SR) & bit_field) == idle_val) {
+ 			if (bit_field == SR_TF_EMPTY) {
+ 				speed = rs->speed_hz;
+@@ -270,15 +264,6 @@ static inline void wait_for_tx_idle(struct rockchip_spi *rs, bool target_mode)
+ 				udelay(us);
+ 			}
+ 			return;
+-=======
+-		if (target_mode) {
+-			if (!(readl_relaxed(rs->regs + ROCKCHIP_SPI_SR) & SR_TARGET_TX_BUSY) &&
+-			    !((readl_relaxed(rs->regs + ROCKCHIP_SPI_SR) & SR_BUSY)))
+-				return;
+-		} else {
+-			if (!(readl_relaxed(rs->regs + ROCKCHIP_SPI_SR) & SR_BUSY))
+-				return;
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 		}
+ 	} while (!time_after(jiffies, timeout));
+ 
+@@ -416,16 +401,9 @@ static irqreturn_t rockchip_spi_isr(int irq, void *dev_id)
+ 	struct spi_controller *ctlr = dev_id;
+ 	struct rockchip_spi *rs = spi_controller_get_devdata(ctlr);
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	/* When int_cs_inactive comes, spi slave abort */
+ 	if (rs->cs_inactive && readl_relaxed(rs->regs + ROCKCHIP_SPI_ISR) & INT_CS_INACTIVE) {
+ 		ctlr->slave_abort(ctlr);
+-=======
+-	/* When int_cs_inactive comes, spi target abort */
+-	if (rs->cs_inactive &&
+-	    (readl_relaxed(rs->regs + ROCKCHIP_SPI_ISR) & INT_CS_INACTIVE)) {
+-		ctlr->target_abort(ctlr);
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 		writel_relaxed(0, rs->regs + ROCKCHIP_SPI_IMR);
+ 		writel_relaxed(0xffffffff, rs->regs + ROCKCHIP_SPI_ICR);
+ 
+@@ -475,11 +453,7 @@ static void rockchip_spi_dma_rxcb(void *data)
+ 	struct rockchip_spi *rs = spi_controller_get_devdata(ctlr);
+ 	int state = atomic_fetch_andnot(RXDMA, &rs->state);
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	if (state & TXDMA && !rs->slave_aborted)
+-=======
+-	if (state & TXDMA && !rs->target_abort)
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 		return;
+ 
+ 	if (rs->cs_inactive)
+@@ -497,15 +471,11 @@ static void rockchip_spi_dma_txcb(void *data)
+ 	struct rockchip_spi *rs = spi_controller_get_devdata(ctlr);
+ 	int state = atomic_fetch_andnot(TXDMA, &rs->state);
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	if (state & RXDMA && !rs->slave_aborted)
+-=======
+-	if (state & RXDMA && !rs->target_abort)
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 		return;
+ 
+ 	/* Wait until the FIFO data completely. */
+-	wait_for_tx_idle(rs, ctlr->target);
++	wait_for_tx_idle(rs, ctlr->slave);
+ 
+ 	spi_enable_chip(rs, false);
+ 	writel_relaxed(0, rs->regs + ROCKCHIP_SPI_IMR);
+@@ -654,11 +624,7 @@ static int rockchip_spi_pio_transfer(struct rockchip_spi *rs,
+ 
+ static int rockchip_spi_config(struct rockchip_spi *rs,
+ 		struct spi_device *spi, struct spi_transfer *xfer,
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 		enum rockchip_spi_xfer_mode xfer_mode, bool slave_mode)
+-=======
+-		bool use_dma, bool target_mode)
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ {
+ 	u32 cr0 = CR0_FRF_SPI  << CR0_FRF_OFFSET
+ 		| CR0_BHT_8BIT << CR0_BHT_OFFSET
+@@ -667,26 +633,16 @@ static int rockchip_spi_config(struct rockchip_spi *rs,
+ 	u32 cr1;
+ 	u32 dmacr = 0;
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	if (slave_mode)
+ 		cr0 |= CR0_OPM_SLAVE << CR0_OPM_OFFSET;
+ 	rs->slave_aborted = false;
+-=======
+-	if (target_mode)
+-		cr0 |= CR0_OPM_TARGET << CR0_OPM_OFFSET;
+-	rs->target_abort = false;
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 
+ 	cr0 |= rs->rsd << CR0_RSD_OFFSET;
+ 	cr0 |= rs->csm << CR0_CSM_OFFSET;
+ 	cr0 |= (spi->mode & 0x3U) << CR0_SCPH_OFFSET;
+ 	if (spi->mode & SPI_LSB_FIRST)
+ 		cr0 |= CR0_FBM_LSB << CR0_FBM_OFFSET;
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	if (spi->mode & SPI_CS_HIGH && !spi_get_csgpiod(spi, 0))
+-=======
+-	if ((spi->mode & SPI_CS_HIGH) && !spi->cs_gpiod)
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 		cr0 |= BIT(spi->chip_select) << CR0_SOI_OFFSET;
+ 
+ 	if (xfer->rx_buf && xfer->tx_buf) {
+@@ -796,7 +752,7 @@ static size_t rockchip_spi_max_transfer_size(struct spi_device *spi)
+ 	return ROCKCHIP_SPI_MAX_TRANLEN;
+ }
+ 
+-static int rockchip_spi_target_abort(struct spi_controller *ctlr)
++static int rockchip_spi_slave_abort(struct spi_controller *ctlr)
+ {
+ 	struct rockchip_spi *rs = spi_controller_get_devdata(ctlr);
+ 	u32 rx_fifo_left;
+@@ -849,34 +805,6 @@ static int rockchip_spi_transfer_wait(struct spi_controller *ctlr,
+ 		}
+ 	}
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+-=======
+-	/* Get the valid data left in rx fifo and set rs->xfer->len real rx size */
+-	if (rs->rx) {
+-		rx_fifo_left = readl_relaxed(rs->regs + ROCKCHIP_SPI_RXFLR);
+-		for (; rx_fifo_left; rx_fifo_left--) {
+-			u32 rxw = readl_relaxed(rs->regs + ROCKCHIP_SPI_RXDR);
+-
+-			if (rs->n_bytes == 1)
+-				*(u8 *)rs->rx = (u8)rxw;
+-			else
+-				*(u16 *)rs->rx = (u16)rxw;
+-			rs->rx += rs->n_bytes;
+-		}
+-		rs->xfer->len = (unsigned int)(rs->rx - rs->xfer->rx_buf);
+-	}
+-
+-out:
+-	if (atomic_read(&rs->state) & RXDMA)
+-		dmaengine_terminate_sync(ctlr->dma_rx);
+-	if (atomic_read(&rs->state) & TXDMA)
+-		dmaengine_terminate_sync(ctlr->dma_tx);
+-	atomic_set(&rs->state, 0);
+-	spi_enable_chip(rs, false);
+-	rs->target_abort = true;
+-	spi_finalize_current_transfer(ctlr);
+-
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 	return 0;
+ }
+ 
+@@ -921,11 +849,7 @@ static int rockchip_spi_transfer_one(
+ 			xfer_mode = ROCKCHIP_SPI_IRQ;
+ 	}
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	ret = rockchip_spi_config(rs, spi, xfer, xfer_mode, ctlr->slave);
+-=======
+-	ret = rockchip_spi_config(rs, spi, xfer, use_dma, ctlr->target);
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 	if (ret)
+ 		return ret;
+ 
+@@ -1060,24 +984,19 @@ static int rockchip_spi_probe(struct platform_device *pdev)
+ 	struct spi_controller *ctlr;
+ 	struct resource *mem;
+ 	struct device_node *np = pdev->dev.of_node;
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	u32 rsd_nsecs, num_cs, csm;
+ 	bool slave_mode;
+ 	struct pinctrl *pinctrl = NULL;
+ 	const struct rockchip_spi_quirks *quirks_cfg;
+ 	u32 val;
+-=======
+-	u32 rsd_nsecs, num_cs;
+-	bool target_mode;
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 
+-	target_mode = of_property_read_bool(np, "spi-slave");
++	slave_mode = of_property_read_bool(np, "spi-slave");
+ 
+-	if (target_mode)
+-		ctlr = spi_alloc_target(&pdev->dev,
++	if (slave_mode)
++		ctlr = spi_alloc_slave(&pdev->dev,
+ 				sizeof(struct rockchip_spi));
+ 	else
+-		ctlr = spi_alloc_host(&pdev->dev,
++		ctlr = spi_alloc_master(&pdev->dev,
+ 				sizeof(struct rockchip_spi));
+ 
+ 	if (!ctlr)
+@@ -1087,6 +1006,7 @@ static int rockchip_spi_probe(struct platform_device *pdev)
+ 	platform_set_drvdata(pdev, ctlr);
+ 
+ 	rs = spi_controller_get_devdata(ctlr);
++	ctlr->slave = slave_mode;
+ 
+ 	/* Get basic io resource and map it */
+ 	mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+@@ -1207,9 +1127,9 @@ static int rockchip_spi_probe(struct platform_device *pdev)
+ 	ctlr->auto_runtime_pm = true;
+ 	ctlr->bus_num = pdev->id;
+ 	ctlr->mode_bits = SPI_CPOL | SPI_CPHA | SPI_LOOP | SPI_LSB_FIRST;
+-	if (target_mode) {
++	if (slave_mode) {
+ 		ctlr->mode_bits |= SPI_NO_CS;
+-		ctlr->target_abort = rockchip_spi_target_abort;
++		ctlr->slave_abort = rockchip_spi_slave_abort;
+ 	} else {
+ 		ctlr->flags = SPI_MASTER_GPIO_SS;
+ 		ctlr->max_native_cs = ROCKCHIP_SPI_MAX_CS_NUM;
+@@ -1273,11 +1193,7 @@ static int rockchip_spi_probe(struct platform_device *pdev)
+ 	case ROCKCHIP_SPI_VER2_TYPE2:
+ 		rs->cs_high_supported = true;
+ 		ctlr->mode_bits |= SPI_CS_HIGH;
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 		if (slave_mode)
+-=======
+-		if (ctlr->can_dma && target_mode)
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 			rs->cs_inactive = true;
+ 		else
+ 			rs->cs_inactive = false;
+@@ -1305,7 +1221,7 @@ static int rockchip_spi_probe(struct platform_device *pdev)
+ 		goto err_free_dma_rx;
+ 	}
+ 
+-	ret = spi_register_controller(ctlr);
++	ret = devm_spi_register_controller(&pdev->dev, ctlr);
+ 	if (ret < 0) {
+ 		dev_err(&pdev->dev, "Failed to register controller\n");
+ 		goto err_free_dma_rx;
+@@ -1366,8 +1282,6 @@ static int rockchip_spi_remove(struct platform_device *pdev)
+ 	clk_disable_unprepare(rs->spiclk);
+ 	clk_disable_unprepare(rs->apb_pclk);
+ 
+-	spi_unregister_controller(ctlr);
+-
+ 	pm_runtime_put_noidle(&pdev->dev);
+ 	pm_runtime_disable(&pdev->dev);
+ 	pm_runtime_set_suspended(&pdev->dev);
+diff --git a/drivers/usb/core/quirks.c b/drivers/usb/core/quirks.c
+remerge CONFLICT (content): Merge conflict in drivers/usb/core/quirks.c
+index 6f918d97f231..46302b261a1a 100644
+--- a/drivers/usb/core/quirks.c
++++ b/drivers/usb/core/quirks.c
+@@ -589,13 +589,10 @@ static const struct usb_device_id usb_quirk_list[] = {
+ 	/* VLI disk */
+ 	{ USB_DEVICE(0x2109, 0x0711), .driver_info = USB_QUIRK_NO_LPM },
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	/* Lexar Flash */
+ 	{ USB_DEVICE(0x21c4, 0x0cd1), .driver_info = USB_QUIRK_NO_LPM },
+-=======
+ 	/* VIA Labs, Inc. USB2.0 Hub */
+ 	{ USB_DEVICE(0x2109, 0x2817), .driver_info = USB_QUIRK_NO_LPM },
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 
+ 	/* Raydium Touchscreen */
+ 	{ USB_DEVICE(0x2386, 0x3114), .driver_info = USB_QUIRK_NO_LPM },
+diff --git a/drivers/usb/dwc3/core.c b/drivers/usb/dwc3/core.c
+remerge CONFLICT (content): Merge conflict in drivers/usb/dwc3/core.c
+index 4fc31c103b66..1988b6a8bc35 100644
+--- a/drivers/usb/dwc3/core.c
++++ b/drivers/usb/dwc3/core.c
+@@ -1906,7 +1906,6 @@ static struct extcon_dev *dwc3_get_extcon(struct dwc3 *dwc)
+ 	return edev;
+ }
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ static int dwc3_get_clocks(struct dwc3 *dwc)
+ {
+ 	struct device *dev = dwc->dev;
+@@ -1977,7 +1976,8 @@ static int dwc3_get_clocks(struct dwc3 *dwc)
+ 	}
+ 
+ 	return 0;
+-=======
++}
++
+ static void dwc3_vbus_draw_work(struct work_struct *work)
+ {
+ 	struct dwc3 *dwc = container_of(work, struct dwc3, vbus_draw_work);
+@@ -1990,7 +1990,6 @@ static void dwc3_vbus_draw_work(struct work_struct *work)
+ 	if (ret < 0)
+ 		dev_dbg(dwc->dev, "Error (%d) setting vbus draw (%d mA)\n",
+ 			ret, dwc->current_limit);
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ }
+ 
+ static struct power_supply *dwc3_get_usb_power_supply(struct dwc3 *dwc)
+diff --git a/drivers/usb/dwc3/core.h b/drivers/usb/dwc3/core.h
+remerge CONFLICT (content): Merge conflict in drivers/usb/dwc3/core.h
+index 8ada74a92c07..85049f8f47b9 100644
+--- a/drivers/usb/dwc3/core.h
++++ b/drivers/usb/dwc3/core.h
+@@ -41,12 +41,8 @@
+ #define DWC3_EP0_SETUP_SIZE	512
+ #define DWC3_ENDPOINTS_NUM	32
+ #define DWC3_XHCI_RESOURCES_NUM	2
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ #define DWC3_ISOC_MAX_RETRIES	50
+-=======
+-#define DWC3_ISOC_MAX_RETRIES	5
+ #define DWC3_ERR_RECOVERY_MAX	3
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 
+ #define DWC3_SCRATCHBUF_SIZE	4096	/* each buffer is assumed to be 4KiB */
+ #define DWC3_EVENT_BUFFERS_SIZE	4096
+diff --git a/drivers/usb/gadget/function/u_audio.c b/drivers/usb/gadget/function/u_audio.c
+remerge CONFLICT (content): Merge conflict in drivers/usb/gadget/function/u_audio.c
+index a57a303878c1..f950345d1062 100644
+--- a/drivers/usb/gadget/function/u_audio.c
++++ b/drivers/usb/gadget/function/u_audio.c
+@@ -1239,7 +1239,6 @@ static struct snd_kcontrol_new u_audio_controls[]  = {
+ 	},
+ };
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ static void g_audio_work(struct work_struct *data)
+ {
+ 	struct g_audio *audio = container_of(data, struct g_audio, work);
+@@ -1428,7 +1427,8 @@ static void ppm_calculate_work(struct work_struct *data)
+ 
+ out:
+ 	schedule_delayed_work(&g_audio->ppm_work, 1 * HZ);
+-=======
++}
++
+ static void u_audio_card_free(struct snd_card *card)
+ {
+ 	struct snd_uac_chip *uac = card->private_data;
+@@ -1441,7 +1441,6 @@ static void u_audio_card_free(struct snd_card *card)
+ 	kfree(uac->p_prm.rbuf);
+ 	kfree(uac->c_prm.rbuf);
+ 	kfree(uac);
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ }
+ 
+ int g_audio_setup(struct g_audio *g_audio, const char *pcm_name,
+@@ -1749,16 +1748,7 @@ void g_audio_cleanup(struct g_audio *g_audio)
+ 	card = uac->card;
+ 	if (card)
+ 		snd_card_free_when_closed(card);
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+-
+-	kfree(uac->p_prm.reqs);
+-	kfree(uac->c_prm.reqs);
+-	kfree(uac->p_prm.rbuf);
+-	kfree(uac->c_prm.rbuf);
+-	kfree(uac);
+ 	kfree(g_audio->fn);
+-=======
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ }
+ EXPORT_SYMBOL_GPL(g_audio_cleanup);
+ 
+diff --git a/mm/page_alloc.c b/mm/page_alloc.c
+remerge CONFLICT (content): Merge conflict in mm/page_alloc.c
+index 18bb6e4c5520..a6fc8117e1c1 100644
+--- a/mm/page_alloc.c
++++ b/mm/page_alloc.c
+@@ -1658,14 +1658,9 @@ static void free_one_page(struct zone *zone,
+ 	spin_unlock_irqrestore(&zone->lock, flags);
+ }
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+-static void __meminit __init_single_page(struct page *page, unsigned long pfn,
++static void __meminit __init_single_page_rk(struct page *page, unsigned long pfn,
+ 				unsigned long zone, int nid,
+ 				bool zero_page_struct __maybe_unused)
+-=======
+-void __meminit __init_single_page(struct page *page, unsigned long pfn,
+-				  unsigned long zone, int nid)
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ {
+ #ifdef CONFIG_ROCKCHIP_THUNDER_BOOT
+ 	if (zero_page_struct)
+@@ -1687,6 +1682,14 @@ void __meminit __init_single_page(struct page *page, unsigned long pfn,
+ #endif
+ }
+ 
++/* Exported 4-arg form used by mm/mm_init.c (6.1.y stable); Rockchip/ACK add
++ * a zero_page_struct flag, which the zone-device path always set. */
++void __meminit __init_single_page(struct page *page, unsigned long pfn,
++				  unsigned long zone, int nid)
++{
++	__init_single_page_rk(page, pfn, zone, nid, true);
++}
++
+ #ifdef CONFIG_DEFERRED_STRUCT_PAGE_INIT
+ static void __meminit init_reserved_page(unsigned long pfn)
+ {
+@@ -1705,7 +1708,7 @@ static void __meminit init_reserved_page(unsigned long pfn)
+ 		if (zone_spans_pfn(zone, pfn))
+ 			break;
+ 	}
+-	__init_single_page(pfn_to_page(pfn), pfn, zid, nid, true);
++	__init_single_page_rk(pfn_to_page(pfn), pfn, zid, nid, true);
+ }
+ #else
+ static inline void init_reserved_page(unsigned long pfn)
+@@ -1886,7 +1889,7 @@ unsigned long __init rk_deferred_init_pages(struct zone *zone,
+ 		else
+ 			page++;
+ 
+-		__init_single_page(page, pfn, zid, nid, true);
++		__init_single_page_rk(page, pfn, zid, nid, true);
+ 		nr_pages++;
+ 
+ 		/* Call cond_resched() only once every 8 pages */
+@@ -2063,7 +2066,7 @@ static unsigned long  __init deferred_init_pages(struct zone *zone,
+ 		} else {
+ 			page++;
+ 		}
+-		__init_single_page(page, pfn, zid, nid, true);
++		__init_single_page_rk(page, pfn, zid, nid, true);
+ 		nr_pages++;
+ 	}
+ 	return (nr_pages);
+@@ -6952,7 +6955,7 @@ void __meminit memmap_init_range(unsigned long size, int nid, unsigned long zone
+ 		}
+ 
+ 		page = pfn_to_page(pfn);
+-		__init_single_page(page, pfn, zone, nid, false);
++		__init_single_page_rk(page, pfn, zone, nid, false);
+ 		if (context == MEMINIT_HOTPLUG)
+ 			__SetPageReserved(page);
+ 
+@@ -6969,145 +6972,6 @@ void __meminit memmap_init_range(unsigned long size, int nid, unsigned long zone
+ 	}
+ }
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+-#ifdef CONFIG_ZONE_DEVICE
+-static void __ref __init_zone_device_page(struct page *page, unsigned long pfn,
+-					  unsigned long zone_idx, int nid,
+-					  struct dev_pagemap *pgmap)
+-{
+-
+-	__init_single_page(page, pfn, zone_idx, nid, true);
+-
+-	/*
+-	 * Mark page reserved as it will need to wait for onlining
+-	 * phase for it to be fully associated with a zone.
+-	 *
+-	 * We can use the non-atomic __set_bit operation for setting
+-	 * the flag as we are still initializing the pages.
+-	 */
+-	__SetPageReserved(page);
+-
+-	/*
+-	 * ZONE_DEVICE pages union ->lru with a ->pgmap back pointer
+-	 * and zone_device_data.  It is a bug if a ZONE_DEVICE page is
+-	 * ever freed or placed on a driver-private list.
+-	 */
+-	page->pgmap = pgmap;
+-	page->zone_device_data = NULL;
+-
+-	/*
+-	 * Mark the block movable so that blocks are reserved for
+-	 * movable at startup. This will force kernel allocations
+-	 * to reserve their blocks rather than leaking throughout
+-	 * the address space during boot when many long-lived
+-	 * kernel allocations are made.
+-	 *
+-	 * Please note that MEMINIT_HOTPLUG path doesn't clear memmap
+-	 * because this is done early in section_activate()
+-	 */
+-	if (pageblock_aligned(pfn)) {
+-		set_pageblock_migratetype(page, MIGRATE_MOVABLE);
+-		cond_resched();
+-	}
+-
+-	/*
+-	 * ZONE_DEVICE pages are released directly to the driver page allocator
+-	 * which will set the page count to 1 when allocating the page.
+-	 */
+-	if (pgmap->type == MEMORY_DEVICE_PRIVATE ||
+-	    pgmap->type == MEMORY_DEVICE_COHERENT)
+-		set_page_count(page, 0);
+-}
+-
+-/*
+- * With compound page geometry and when struct pages are stored in ram most
+- * tail pages are reused. Consequently, the amount of unique struct pages to
+- * initialize is a lot smaller that the total amount of struct pages being
+- * mapped. This is a paired / mild layering violation with explicit knowledge
+- * of how the sparse_vmemmap internals handle compound pages in the lack
+- * of an altmap. See vmemmap_populate_compound_pages().
+- */
+-static inline unsigned long compound_nr_pages(struct vmem_altmap *altmap,
+-					      unsigned long nr_pages)
+-{
+-	return is_power_of_2(sizeof(struct page)) &&
+-		!altmap ? 2 * (PAGE_SIZE / sizeof(struct page)) : nr_pages;
+-}
+-
+-static void __ref memmap_init_compound(struct page *head,
+-				       unsigned long head_pfn,
+-				       unsigned long zone_idx, int nid,
+-				       struct dev_pagemap *pgmap,
+-				       unsigned long nr_pages)
+-{
+-	unsigned long pfn, end_pfn = head_pfn + nr_pages;
+-	unsigned int order = pgmap->vmemmap_shift;
+-
+-	__SetPageHead(head);
+-	for (pfn = head_pfn + 1; pfn < end_pfn; pfn++) {
+-		struct page *page = pfn_to_page(pfn);
+-
+-		__init_zone_device_page(page, pfn, zone_idx, nid, pgmap);
+-		prep_compound_tail(head, pfn - head_pfn);
+-		set_page_count(page, 0);
+-
+-		/*
+-		 * The first tail page stores compound_mapcount_ptr() and
+-		 * compound_order() and the second tail page stores
+-		 * compound_pincount_ptr(). Call prep_compound_head() after
+-		 * the first and second tail pages have been initialized to
+-		 * not have the data overwritten.
+-		 */
+-		if (pfn == head_pfn + 2)
+-			prep_compound_head(head, order);
+-	}
+-}
+-
+-void __ref memmap_init_zone_device(struct zone *zone,
+-				   unsigned long start_pfn,
+-				   unsigned long nr_pages,
+-				   struct dev_pagemap *pgmap)
+-{
+-	unsigned long pfn, end_pfn = start_pfn + nr_pages;
+-	struct pglist_data *pgdat = zone->zone_pgdat;
+-	struct vmem_altmap *altmap = pgmap_altmap(pgmap);
+-	unsigned int pfns_per_compound = pgmap_vmemmap_nr(pgmap);
+-	unsigned long zone_idx = zone_idx(zone);
+-	unsigned long start = jiffies;
+-	int nid = pgdat->node_id;
+-
+-	if (WARN_ON_ONCE(!pgmap || zone_idx != ZONE_DEVICE))
+-		return;
+-
+-	/*
+-	 * The call to memmap_init should have already taken care
+-	 * of the pages reserved for the memmap, so we can just jump to
+-	 * the end of that region and start processing the device pages.
+-	 */
+-	if (altmap) {
+-		start_pfn = altmap->base_pfn + vmem_altmap_offset(altmap);
+-		nr_pages = end_pfn - start_pfn;
+-	}
+-
+-	for (pfn = start_pfn; pfn < end_pfn; pfn += pfns_per_compound) {
+-		struct page *page = pfn_to_page(pfn);
+-
+-		__init_zone_device_page(page, pfn, zone_idx, nid, pgmap);
+-
+-		if (pfns_per_compound == 1)
+-			continue;
+-
+-		memmap_init_compound(page, pfn, zone_idx, nid, pgmap,
+-				     compound_nr_pages(altmap, pfns_per_compound));
+-	}
+-
+-	pr_info("%s initialised %lu pages in %ums\n", __func__,
+-		nr_pages, jiffies_to_msecs(jiffies - start));
+-}
+-
+-#endif
+-=======
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ static void __meminit zone_init_free_lists(struct zone *zone)
+ {
+ 	unsigned int order, t;
+@@ -7151,7 +7015,7 @@ static void __init init_unavailable_range(unsigned long spfn,
+ 			pfn = pageblock_end_pfn(pfn) - 1;
+ 			continue;
+ 		}
+-		__init_single_page(pfn_to_page(pfn), pfn, zone, node, true);
++		__init_single_page_rk(pfn_to_page(pfn), pfn, zone, node, true);
+ 		__SetPageReserved(pfn_to_page(pfn));
+ 		pgcnt++;
+ 	}
+diff --git a/sound/soc/rockchip/rockchip_pdm.c b/sound/soc/rockchip/rockchip_pdm.c
+remerge CONFLICT (content): Merge conflict in sound/soc/rockchip/rockchip_pdm.c
+index 51e6f678322d..c291d973b380 100644
+--- a/sound/soc/rockchip/rockchip_pdm.c
++++ b/sound/soc/rockchip/rockchip_pdm.c
+@@ -823,7 +823,6 @@ static int rockchip_pdm_runtime_resume(struct device *dev)
+ 	struct rk_pdm_dev *pdm = dev_get_drvdata(dev);
+ 	int ret;
+ 
+-<<<<<<< 77168c8d5ab8 (arm64: dts: rockchip: rv1126bp-evb-v14: switch Bluetooth to RK960 serdev)
+ 	ret = clk_enable(pdm->clk);
+ 	if (ret)
+ 		goto err_clk;
+@@ -842,20 +841,6 @@ static int rockchip_pdm_runtime_resume(struct device *dev)
+ 
+ 	if (pdm->quirks & QUIRK_ALWAYS_ON)
+ 		rockchip_pdm_pinctrl_select_clk_state(dev);
+-=======
+-	ret = clk_prepare_enable(pdm->hclk);
+-	if (ret) {
+-		dev_err(pdm->dev, "hclock enable failed %d\n", ret);
+-		return ret;
+-	}
+-
+-	ret = clk_prepare_enable(pdm->clk);
+-	if (ret) {
+-		clk_disable_unprepare(pdm->hclk);
+-		dev_err(pdm->dev, "clock enable failed %d\n", ret);
+-		return ret;
+-	}
+->>>>>>> c75b0cf0982c (Linux 6.1.192)
+ 
+ 	return 0;
+ 

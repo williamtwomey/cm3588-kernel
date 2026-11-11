@@ -1,0 +1,39 @@
+From 9f12e03ab2b7790c06fc447e009b81ed294b16b3 Mon Sep 17 00:00:00 2001
+From: Will Twomey <william.twomey@gmail.com>
+Date: Wed, 11 Nov 2026 13:01:25 -0600
+Subject: [PATCH 02/14] pinctrl: rk806: follow the gc/offset
+ pinctrl_gpio_direction_*() API
+
+v6.1.192 backports the gpio_chip + offset signature for
+pinctrl_gpio_direction_{input,output}() and converts the mainline
+callers; Rockchip's out-of-mainline pinctrl-rk806 still passed a global
+GPIO number.
+---
+ drivers/pinctrl/pinctrl-rk806.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/pinctrl/pinctrl-rk806.c b/drivers/pinctrl/pinctrl-rk806.c
+index ba4626993bc6..7dac2877a3f5 100644
+--- a/drivers/pinctrl/pinctrl-rk806.c
++++ b/drivers/pinctrl/pinctrl-rk806.c
+@@ -234,7 +234,7 @@ static void rk806_gpio_set(struct gpio_chip *chip,
+ static int rk806_gpio_direction_input(struct gpio_chip *chip,
+ 				      unsigned int offset)
+ {
+-	return pinctrl_gpio_direction_input(chip->base + offset);
++	return pinctrl_gpio_direction_input(chip, offset);
+ }
+ 
+ static int rk806_gpio_direction_output(struct gpio_chip *chip,
+@@ -242,7 +242,7 @@ static int rk806_gpio_direction_output(struct gpio_chip *chip,
+ 				       int value)
+ {
+ 	rk806_gpio_set(chip, offset, value);
+-	return pinctrl_gpio_direction_output(chip->base + offset);
++	return pinctrl_gpio_direction_output(chip, offset);
+ }
+ 
+ static int rk806_gpio_get_direction(struct gpio_chip *chip,
+-- 
+2.53.0
+

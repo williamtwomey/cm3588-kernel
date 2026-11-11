@@ -1,0 +1,40 @@
+From a6b2287c9e2d9b5e47b91ceffa15df2966e43369 Mon Sep 17 00:00:00 2001
+From: Will Twomey <william.twomey@gmail.com>
+Date: Wed, 11 Nov 2026 13:09:40 -0600
+Subject: [PATCH 14/14] PCI: rockchip: dw: honour rockchip,init-delay-ms
+ (FriendlyElec)
+
+The nanopi6 DTS sets it to keep PCIe probe order, and so NIC/NVMe
+enumeration, stable. Hand-port of FriendlyElec 6c59b1fb44a8; their other
+pcie-dw-rockchip tweaks (skip-hw-retry etc.) aren't used by CM3588 and
+the surrounding code has since been reworked by Rockchip.
+---
+ drivers/pci/controller/dwc/pcie-dw-rockchip.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/pci/controller/dwc/pcie-dw-rockchip.c b/drivers/pci/controller/dwc/pcie-dw-rockchip.c
+index 8e3f6ecd3872..9c089ecb80c2 100644
+--- a/drivers/pci/controller/dwc/pcie-dw-rockchip.c
++++ b/drivers/pci/controller/dwc/pcie-dw-rockchip.c
+@@ -653,6 +653,7 @@ static int rk_add_pcie_port(struct rk_pcie *rk_pcie, struct platform_device *pde
+ static int rk_pcie_resource_get(struct platform_device *pdev,
+ 					 struct rk_pcie *rk_pcie)
+ {
++	u32 init_delay_ms;
+ 	struct resource *dbi_base;
+ 	struct resource *apb_base;
+ 	u32 val = 0;
+@@ -800,6 +801,10 @@ static int rk_pcie_resource_get(struct platform_device *pdev,
+ 			regulator_suspend_enable(rk_pcie->vpcie3v3->rdev, PM_SUSPEND_MEM);
+ 	}
+ 
++	/* FriendlyElec: optional delay to keep PCIe probe (and so NIC/NVMe) order stable */
++	if (!device_property_read_u32(&pdev->dev, "rockchip,init-delay-ms", &init_delay_ms))
++		msleep(init_delay_ms);
++
+ 	return 0;
+ }
+ 
+-- 
+2.53.0
+

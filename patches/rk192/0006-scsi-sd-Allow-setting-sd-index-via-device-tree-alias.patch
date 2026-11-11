@@ -1,0 +1,104 @@
+From f848ea6992eed725bc4ab633503b8cd1174823cc Mon Sep 17 00:00:00 2001
+From: jensen <jensenhuang@friendlyarm.com>
+Date: Sat, 13 Jul 2024 15:44:57 +0800
+Subject: [PATCH 06/14] scsi: sd: Allow setting sd index via device tree alias
+
+Signed-off-by: jensen <jensenhuang@friendlyarm.com>
+(cherry picked from commit 8e1eb21c38c420cd85801037f6aa101598bfb1f2)
+---
+ drivers/scsi/scsi_scan.c | 27 +++++++++++++++++++++++++++
+ drivers/scsi/sd.c        | 12 +++++++++++-
+ 2 files changed, 38 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/scsi/scsi_scan.c b/drivers/scsi/scsi_scan.c
+index c5753922e6ac..1f7c2c2b9d06 100644
+--- a/drivers/scsi/scsi_scan.c
++++ b/drivers/scsi/scsi_scan.c
+@@ -34,6 +34,7 @@
+ #include <linux/kthread.h>
+ #include <linux/spinlock.h>
+ #include <linux/async.h>
++#include <linux/of.h>
+ #include <linux/slab.h>
+ #include <asm/unaligned.h>
+ 
+@@ -261,6 +262,31 @@ static int scsi_realloc_sdev_budget_map(struct scsi_device *sdev,
+ 	return ret;
+ }
+ 
++static void scsi_set_lun_of_node(struct scsi_device *sdev)
++{
++	struct device_node *node, *parent;
++	struct device *dev;
++	u32 reg;
++
++	dev = scsi_get_device(sdev->host);
++	if (!dev)
++		return;
++
++	node = of_get_child_by_name(dev->of_node, "scsi");
++	if (node)
++		parent = node;
++
++	for_each_child_of_node(parent, node) {
++		if (of_property_read_u32(node, "reg", &reg))
++			continue;
++
++		if (reg == sdev->lun) {
++			sdev->sdev_gendev.of_node = node;
++			return;
++		}
++	}
++}
++
+ /**
+  * scsi_alloc_sdev - allocate and setup a scsi_Device
+  * @starget: which target to allocate a &scsi_device for
+@@ -360,6 +386,7 @@ static struct scsi_device *scsi_alloc_sdev(struct scsi_target *starget,
+ 	scsi_change_queue_depth(sdev, depth);
+ 
+ 	scsi_sysfs_device_initialize(sdev);
++	scsi_set_lun_of_node(sdev);
+ 
+ 	if (shost->hostt->slave_alloc) {
+ 		ret = shost->hostt->slave_alloc(sdev);
+diff --git a/drivers/scsi/sd.c b/drivers/scsi/sd.c
+index df47139aa380..19ebdcbb0fc0 100644
+--- a/drivers/scsi/sd.c
++++ b/drivers/scsi/sd.c
+@@ -52,6 +52,7 @@
+ #include <linux/string_helpers.h>
+ #include <linux/slab.h>
+ #include <linux/sed-opal.h>
++#include <linux/of.h>
+ #include <linux/pm_runtime.h>
+ #include <linux/pr.h>
+ #include <linux/t10-pi.h>
+@@ -3558,6 +3559,7 @@ static int sd_probe(struct device *dev)
+ 	struct scsi_disk *sdkp;
+ 	struct gendisk *gd;
+ 	int index;
++	int min_idx, max_idx;
+ 	int error;
+ 
+ 	scsi_autopm_get_device(sdp);
+@@ -3587,7 +3589,15 @@ static int sd_probe(struct device *dev)
+ 	if (!gd)
+ 		goto out_free;
+ 
+-	index = ida_alloc(&sd_index_ida, GFP_KERNEL);
++	min_idx= of_alias_get_id(dev->of_node, "scsi");
++	if (min_idx >= 0) {
++		max_idx = min_idx + 1;
++	} else {
++		min_idx = of_alias_get_highest_id("scsi");
++		min_idx = min_idx < 0 ? 0 : (min_idx + 1);
++		max_idx = 0;
++	}
++	index = ida_simple_get(&sd_index_ida, min_idx, max_idx, GFP_KERNEL);
+ 	if (index < 0) {
+ 		sdev_printk(KERN_WARNING, sdp, "sd_probe: memory exhausted.\n");
+ 		goto out_put;
+-- 
+2.53.0
+

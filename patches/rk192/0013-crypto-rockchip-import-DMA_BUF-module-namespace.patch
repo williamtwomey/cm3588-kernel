@@ -1,0 +1,24 @@
+From 1d38738591b8061ce997158e0d737d7fae1a7e7a Mon Sep 17 00:00:00 2001
+From: jensen <jensenhuang@friendlyarm.com>
+Date: Thu, 10 Aug 2023 21:10:00 +0800
+Subject: [PATCH 13/14] crypto: rockchip: import DMA_BUF module namespace
+
+Signed-off-by: jensen <jensenhuang@friendlyarm.com>
+(cherry picked from commit 0b51e09042fdaca7c9691d348b084cfd41976acd)
+---
+ drivers/crypto/rockchip/cryptodev_linux/rk_cryptodev.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/crypto/rockchip/cryptodev_linux/rk_cryptodev.c b/drivers/crypto/rockchip/cryptodev_linux/rk_cryptodev.c
+index fe1a22191f09..34e6151f87e7 100644
+--- a/drivers/crypto/rockchip/cryptodev_linux/rk_cryptodev.c
++++ b/drivers/crypto/rockchip/cryptodev_linux/rk_cryptodev.c
+@@ -1706,3 +1706,5 @@ bool rk_cryptodev_multi_thread(const char *name)
+ 
+ 	return false;
+ }
++
++MODULE_IMPORT_NS(DMA_BUF);
+-- 
+2.53.0
+

@@ -1,0 +1,157 @@
+From d8ff7e1b9e71b911b66c93b21b4dca8f3ecbe8ca Mon Sep 17 00:00:00 2001
+From: Will Twomey <william.twomey@gmail.com>
+Date: Wed, 11 Nov 2026 13:05:47 -0600
+Subject: [PATCH 04/14] rknpu: take FriendlyElec's drivers/rknpu (same 0.9.8)
+
+Adds their iommu_get_dma_cookie stub (lets rknpu build as a module;
+Rockchip's version only links built-in) and MODULE_DEVICE_TABLE for
+autoloading, from friendlyarm/kernel-rockchip nanopi6-v6.1.y.
+---
+ drivers/Makefile                    |  2 +-
+ drivers/rknpu/Makefile              |  1 +
+ drivers/rknpu/include/rknpu_iommu.h |  2 ++
+ drivers/rknpu/rknpu_drv.c           | 38 ++++-------------------------
+ drivers/rknpu/rknpu_iommu.c         |  2 +-
+ drivers/rknpu/rknpu_iommu_stub.c    | 13 ++++++++++
+ 6 files changed, 23 insertions(+), 35 deletions(-)
+ create mode 100644 drivers/rknpu/rknpu_iommu_stub.c
+
+diff --git a/drivers/Makefile b/drivers/Makefile
+index 29874ab087a0..816d838d1371 100644
+--- a/drivers/Makefile
++++ b/drivers/Makefile
+@@ -192,4 +192,4 @@ obj-$(CONFIG_HTE)		+= hte/
+ obj-$(CONFIG_RK_FLASH)		+= rkflash/
+ obj-$(CONFIG_RK_HEADSET)	+= headset_observe/
+ obj-$(CONFIG_RK_NAND)		+= rk_nand/
+-obj-$(CONFIG_ROCKCHIP_RKNPU)	+= rknpu/
++obj-y				+= rknpu/
+diff --git a/drivers/rknpu/Makefile b/drivers/rknpu/Makefile
+index d73563dbaf7d..a2c26a362711 100644
+--- a/drivers/rknpu/Makefile
++++ b/drivers/rknpu/Makefile
+@@ -1,5 +1,6 @@
+ # SPDX-License-Identifier: GPL-2.0
+ obj-$(CONFIG_ROCKCHIP_RKNPU) += rknpu.o
++obj-y += rknpu_iommu_stub.o
+ 
+ ccflags-y += -I$(srctree)/$(src)/include
+ ccflags-y += -I$(src)/include
+diff --git a/drivers/rknpu/include/rknpu_iommu.h b/drivers/rknpu/include/rknpu_iommu.h
+index 225176650b60..0e02e4d632c8 100644
+--- a/drivers/rknpu/include/rknpu_iommu.h
++++ b/drivers/rknpu/include/rknpu_iommu.h
+@@ -53,6 +53,8 @@ int rknpu_iommu_domain_get_and_switch(struct rknpu_device *rknpu_dev,
+ 				      int domain_id);
+ int rknpu_iommu_domain_put(struct rknpu_device *rknpu_dev);
+ 
++int rknpu_iommu_get_dma_cookie(struct iommu_domain *domain);
++
+ #if KERNEL_VERSION(5, 10, 0) < LINUX_VERSION_CODE
+ int iommu_get_dma_cookie(struct iommu_domain *domain);
+ #endif
+diff --git a/drivers/rknpu/rknpu_drv.c b/drivers/rknpu/rknpu_drv.c
+index 9e6f1d28a55c..a1c98ed0404b 100644
+--- a/drivers/rknpu/rknpu_drv.c
++++ b/drivers/rknpu/rknpu_drv.c
+@@ -338,6 +338,7 @@ static const struct of_device_id rknpu_of_match[] = {
+ 	},
+ 	{},
+ };
++MODULE_DEVICE_TABLE(of, rknpu_of_match);
+ 
+ static int rknpu_get_drv_version(uint32_t *version)
+ {
+@@ -1106,24 +1107,17 @@ static int rknpu_register_irq(struct platform_device *pdev,
+ {
+ 	const struct rknpu_config *config = rknpu_dev->config;
+ 	struct device *dev = &pdev->dev;
+-#if KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE
+-	struct resource *res;
+-#endif
+ 	int i, ret, irq;
+ 
+-#if KERNEL_VERSION(6, 1, 0) > LINUX_VERSION_CODE
+-	res = platform_get_resource_byname(pdev, IORESOURCE_IRQ,
+-					   config->irqs[0].name);
+-	if (res) {
++	irq = platform_get_irq_byname_optional(pdev,
++					       config->irqs[0].name);
++	if (irq > 0) {
+ 		/* there are irq names in dts */
+ 		for (i = 0; i < config->num_irqs; i++) {
+ 			irq = platform_get_irq_byname(pdev,
+ 						      config->irqs[i].name);
+-			if (irq < 0) {
+-				LOG_DEV_ERROR(dev, "no npu %s in dts\n",
+-					      config->irqs[i].name);
++			if (irq < 0)
+ 				return irq;
+-			}
+ 
+ 			ret = devm_request_irq(dev, irq,
+ 					       config->irqs[i].irq_hdl,
+@@ -1150,28 +1144,6 @@ static int rknpu_register_irq(struct platform_device *pdev,
+ 			return ret;
+ 		}
+ 	}
+-#else
+-	/* there are irq names in dts */
+-	for (i = 0; i < config->num_irqs; i++) {
+-		irq = platform_get_irq_byname(pdev, config->irqs[i].name);
+-		if (irq < 0) {
+-			irq = platform_get_irq(pdev, i);
+-			if (irq < 0) {
+-				LOG_DEV_ERROR(dev, "no npu %s in dts\n",
+-					      config->irqs[i].name);
+-				return irq;
+-			}
+-		}
+-
+-		ret = devm_request_irq(dev, irq, config->irqs[i].irq_hdl,
+-				       IRQF_SHARED, dev_name(dev), rknpu_dev);
+-		if (ret < 0) {
+-			LOG_DEV_ERROR(dev, "request %s failed: %d\n",
+-				      config->irqs[i].name, ret);
+-			return ret;
+-		}
+-	}
+-#endif
+ 
+ 	return 0;
+ }
+diff --git a/drivers/rknpu/rknpu_iommu.c b/drivers/rknpu/rknpu_iommu.c
+index a3efb1ef0273..62a50cecc126 100644
+--- a/drivers/rknpu/rknpu_iommu.c
++++ b/drivers/rknpu/rknpu_iommu.c
+@@ -479,7 +479,7 @@ int rknpu_iommu_switch_domain(struct rknpu_device *rknpu_dev, int domain_id)
+ 			return -EIO;
+ 		}
+ 		// init domain iova_cookie
+-		iommu_get_dma_cookie(dst_domain);
++		rknpu_iommu_get_dma_cookie(dst_domain);
+ 
+ 		iommu_detach_device(src_domain, rknpu_dev->dev);
+ 		ret = iommu_attach_device(dst_domain, rknpu_dev->dev);
+diff --git a/drivers/rknpu/rknpu_iommu_stub.c b/drivers/rknpu/rknpu_iommu_stub.c
+new file mode 100644
+index 000000000000..51661b54301d
+--- /dev/null
++++ b/drivers/rknpu/rknpu_iommu_stub.c
+@@ -0,0 +1,13 @@
++// SPDX-License-Identifier: GPL-2.0
++
++#include "rknpu_iommu.h"
++
++#if defined(CONFIG_IOMMU_API) && defined(CONFIG_NO_GKI)
++
++int rknpu_iommu_get_dma_cookie(struct iommu_domain *domain)
++{
++    return iommu_get_dma_cookie(domain);
++}
++EXPORT_SYMBOL(rknpu_iommu_get_dma_cookie);
++
++#endif
+-- 
+2.53.0
+
