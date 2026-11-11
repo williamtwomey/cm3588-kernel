@@ -9,13 +9,22 @@ U-Boot boots the highest-priority slot that is either successful or has tries
 left, and decrements tries on each boot of a slot that isn't marked successful.
 If no slot is bootable it boots `last_boot`.
 
+The decrement happens in board_init, *before* boot_android picks the slot, so
+a slot armed with tries=1 is already at 0 when the choice is made and is never
+booted (seen on serial 2026-11-11). `arm --boots N` therefore stores N+1.
+
+Fallback gotcha: the resource partition (DTB + logo) is resolved before the
+decrement too, so the one boot that falls back from an exhausted slot b runs
+slot a's kernel with slot b's DTB. `status` flags that; a plain reboot is clean,
+because by then b is skipped from the start.
+
 Only the boot SD card carries A/B metadata. The eMMC also has a `misc`
 partition (Android BCB), so the device is found by looking for the disk that
 has both `misc` and `boot_a`, never by partlabel alone.
 
   cm3588-slot status
   cm3588-slot mark-good            # current slot (from /proc/cmdline) successful + last_boot
-  cm3588-slot arm b [--tries 2]    # try slot b next, fall back to the other when tries run out
+  cm3588-slot arm b [--boots 1]    # boot slot b N times unmarked, then fall back to the other
   cm3588-slot init                 # fresh metadata: a bootable (3 tries), b unbootable
   [--dev /dev/mmcblkXpN]           # explicit misc partition (or a misc.img file)
 """
@@ -100,6 +109,12 @@ def show(d, dev):
             state = "UNBOOTABLE (priority 0)"
         print(f"  slot {n}: priority {s['priority']:2d}  {state}{'   <- booted' if n == cur else ''}")
     print(f"  last_boot: {'ab'[d['last_boot']] if d['last_boot'] in (0, 1) else d['last_boot']}")
+    if cur in ("a", "b"):
+        o = "b" if cur == "a" else "a"
+        so = d[o]
+        if so["priority"] > d[cur]["priority"] and not so["successful"] and so["tries"] == 0:
+            print(f"  NOTE: this looks like the fallback boot from exhausted slot {o}; the DTB came from"
+                  f" resource_{o}. Reboot once for a clean slot {cur} boot.")
 
 
 def main():
@@ -111,7 +126,7 @@ def main():
     sub.add_parser("init")
     arm = sub.add_parser("arm")
     arm.add_argument("slot", choices=["a", "b"])
-    arm.add_argument("--tries", type=int, default=2)
+    arm.add_argument("--boots", type=int, default=1)
     args = ap.parse_args()
 
     dev = args.dev or find_misc()
@@ -137,16 +152,17 @@ def main():
         write(dev, d)
         show(d, dev)
     elif args.cmd == "arm":
-        if not 1 <= args.tries <= 7:
-            sys.exit("--tries must be 1..7")
+        if not 1 <= args.boots <= 6:
+            sys.exit("--boots must be 1..6")
+        tries = args.boots + 1  # one is eaten by board_init before the slot is chosen
         other = "b" if args.slot == "a" else "a"
         if not d[other]["successful"]:
             sys.exit(f"slot {other} isn't marked good; arming {args.slot} would leave no fallback")
-        d[args.slot] = {"priority": MAX_PRIORITY, "tries": args.tries, "successful": 0}
+        d[args.slot] = {"priority": MAX_PRIORITY, "tries": tries, "successful": 0}
         d[other]["priority"] = MAX_PRIORITY - 1
         write(dev, d)
         show(d, dev)
-        print(f"next boot tries slot {args.slot}; after {args.tries} failed boots U-Boot falls back to {other}")
+        print(f"next boot is slot {args.slot}; after {args.boots} unmarked boot(s) U-Boot falls back to {other}")
 
 
 if __name__ == "__main__":
