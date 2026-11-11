@@ -27,7 +27,10 @@ TOP=$(cd "$(dirname "$0")/.." && pwd)
 DEV=${1:?usage: $0 /dev/sdX}
 IN=$TOP/inputs
 W=$TOP/out/sdcard
-CMDLINE="root=/dev/mmcblk2p8 rw rootfstype=ext4 rootflags=discard data=/dev/mmcblk2p9"
+# Full eMMC args: on the A/B path no dtbo overlay gets applied (no androidboot.dtbo_idx on the
+# first SD boot, and consoleblank/cgroup args were missing), so everything the eMMC dtbo
+# entry 0 carried goes in the header cmdline.
+CMDLINE="root=/dev/mmcblk2p8 rw rootfstype=ext4 rootflags=discard data=/dev/mmcblk2p9 consoleblank=0 cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory swapaccount=1"
 SLOT_B_IMAGE=${SLOT_B_IMAGE:-$TOP/kernel/arch/arm64/boot/Image}
 SLOT_B_RES=${SLOT_B_RES:-$TOP/out/resource.img}
 
