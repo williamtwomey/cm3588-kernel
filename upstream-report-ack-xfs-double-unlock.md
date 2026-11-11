@@ -70,4 +70,4 @@ Drop the stale early unlock. The block then matches upstream 6.1.y, apart from t
 ## Where to file
 
 - Android Common Kernel: issuetracker.google.com, component "Android Public Tracker > Kernel" (needs a Google account), or a Gerrit change against `kernel/common` `android14-6.1-lts` (`BACKPORT`/`ANDROID:` fix with this description).
-- FriendlyElec: an issue on github.com/friendlyarm/kernel-rockchip (`nanopi6-v6.1.y`), since their 6.1.141 deb ships the bug and their wiki points RK3588 NAS users at Docker on XFS.
+- FriendlyElec: issues are disabled on kernel-rockchip, so filed as a PR instead: https://github.com/friendlyarm/kernel-rockchip/pull/14 (2026-11-11).
