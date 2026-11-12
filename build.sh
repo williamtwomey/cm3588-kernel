@@ -5,6 +5,8 @@
 # Outputs to out/<suffix>/: Image, resource.img, modules-<KV>.tar.gz, SHA256SUMS
 # (plus kernel.img for the FriendlyElec tree).
 unset LOCALVERSION  # kbuild appends $LOCALVERSION to CONFIG_LOCALVERSION; use KSUFFIX
+# neutral "Linux version ... (user@host)" string for published builds
+export KBUILD_BUILD_USER=${KBUILD_BUILD_USER:-builder} KBUILD_BUILD_HOST=${KBUILD_BUILD_HOST:-cm3588-kernel}
 set -euo pipefail
 TOP=$(cd "$(dirname "$0")" && pwd)
 K=$TOP/${KDIR:-kernel}; SUF=${KSUFFIX:--fsfix1}; OUT=$TOP/out/${SUF#-}
