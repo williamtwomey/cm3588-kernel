@@ -8,3 +8,4 @@
 /inputs/
 *.log
 __pycache__/
+/wt-rk2/
