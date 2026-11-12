@@ -1,0 +1,8 @@
+[Unit]
+Description=CM3588 test-kernel boot diagnostics (cm3588-kernel)
+After=multi-user.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/cm3588-bootdiag
+[Install]
+WantedBy=multi-user.target
