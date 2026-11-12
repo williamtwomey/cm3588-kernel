@@ -42,7 +42,15 @@ To go back, reinstall your previous kernel deb, or `dd` the saved `kernel.img` a
 
 Tested on a CM3588 NAS kit only. The debs refuse to install on anything that doesn't report `NanoPi6` in `/proc/device-tree/board/machine`. That covers the whole NanoPi6 family, but I haven't tried the others.
 
-No headers package yet, so out-of-tree DKMS modules won't build against these.
+### Headers
+
+`linux-headers-<kver>` debs are on the release too, for building out-of-tree modules (DKMS and the like). They install to `/usr/src/linux-headers-<kver>` and add the `/lib/modules/<kver>/build` link. You don't need the matching kernel running to build against them.
+
+The kernels are built with gcc 14, and some of the flags they pass need gcc 12 or newer. Ubuntu 22.04's default `gcc` is 11, so the headers depend on `gcc-14 | gcc-13 | gcc-12` and use the newest one installed. On 22.04 that pulls in `gcc-12`. Kbuild warns that the compiler differs from the one the kernel was built with. That's expected, and it's fine for modules.
+
+The host tools in the headers (`fixdep`, `modpost`, `genksyms`...) are built natively on arm64 against glibc 2.35, so they run on Ubuntu 22.04 and newer.
+
+Tested on the board: a test module built against both kernels and loaded on 6.1.192-rk192, and FriendlyElec's r8125 driver built against the rk192 headers.
 
 ## A/B SD card (optional)
 
@@ -56,6 +64,7 @@ It's how both builds here were tested. The gotchas I hit are in the comments of 
 ./build.sh                                # FriendlyElec tree in kernel/ (KSUFFIX=-fsfix2 for that suffix)
 KDIR=wt-rk2 KSUFFIX=-rk192 ./build.sh     # Rockchip + stable tree
 tools/mk-deb.sh <kver> <kernel.img|Image> <resource.img> <modules.tar.gz>
+tools/mk-headers.sh <kdir> <kver>          # needs ssh to an arm64 box (ARM_HOST) to build the host tools
 ```
 
 `build.sh` expects the kernel trees and FriendlyElec's `r8125` source checked out next to it, plus a 6.1.118 `resource.img` under `inputs/` (for the logos). How to rebuild the rk192 tree from Rockchip + stable is in [patches/rk192/README.md](patches/rk192/README.md).
