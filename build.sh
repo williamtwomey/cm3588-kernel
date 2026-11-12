@@ -40,7 +40,7 @@ KV=$($MK -s kernelrelease)
 rm -rf "$OUT/modules"; mkdir -p "$OUT/modules"
 $MK modules -j"$(nproc)"
 $MK INSTALL_MOD_PATH="$OUT/modules" INSTALL_MOD_STRIP=1 modules_install
-$MK M="$TOP/r8125/src" modules -j"$(nproc)" 2>/dev/null || $MK M="$TOP/r8125" modules -j"$(nproc)"
+$MK KCFLAGS="-fmacro-prefix-map=$TOP/=" M="$TOP/r8125/src" modules -j"$(nproc)" 2>/dev/null || $MK KCFLAGS="-fmacro-prefix-map=$TOP/=" M="$TOP/r8125" modules -j"$(nproc)"
 mkdir -p "$OUT/modules/lib/modules/$KV/extra"
 find "$TOP/r8125" -name r8125.ko -exec cp {} "$OUT/modules/lib/modules/$KV/extra/" \;
 aarch64-linux-gnu-strip --strip-debug "$OUT/modules/lib/modules/$KV/extra/"*.ko
