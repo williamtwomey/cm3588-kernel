@@ -18,14 +18,33 @@ The COW path only runs on reflinked extents. overlayfs copy-up on XFS with `refl
 
 ## Builds
 
-Both are on the [releases page](https://github.com/williamtwomey/cm3588-kernel/releases) as debs.
+They're all on the [releases page](https://github.com/williamtwomey/cm3588-kernel/releases) as debs.
 
 | Package | What it is | Status |
 |---|---|---|
 | `linux-image-6.1.141-fsfix2` | FriendlyElec `nanopi6-v6.1.y` (6.1.141) + the double-unlock fix + 71 stable fs/xfs, overlayfs and iomap fixes from up to 6.1.192 | Ran a day with 39 containers on XFS/overlay2, no hangs. Recommended. |
-| `linux-image-6.1.192-rk192` | Rockchip `develop-6.1` (6.1.172) merged with stable v6.1.192, plus FriendlyElec's board support ported over (DTS, RKNPU 0.9.8, PCIe/combphy/pwm-fan bits). No ACK code, so the bug never existed here. | Experimental. Boots and runs everything on my board (NVMe RAID, 2.5G NIC, NPU, MPP/RGA for Immich), but it's new. On one of two boots the RTL8125's PCIe link didn't train, and I haven't root-caused it yet. |
+| `linux-image-6.1.192-rk192.1` | rk192 plus two stable-queue fixes for NULL folio dereferences that 6.1.192 itself shipped (ext4 mballoc, ntfs3). See below. | Experimental, same as rk192. Replaces rk192; don't run rk192. |
+| `linux-image-6.1.192-rk192` | Rockchip `develop-6.1` (6.1.172) merged with stable v6.1.192, plus FriendlyElec's board support ported over (DTS, RKNPU 0.9.8, PCIe/combphy/pwm-fan bits). No ACK code, so the bug never existed here. | **Superseded by rk192.1.** Oopses in ext4 under memory pressure and wedges the box (below). Otherwise it boots and runs everything on my board (NVMe RAID, 2.5G NIC, NPU, MPP/RGA for Immich). On one of two boots the RTL8125's PCIe link didn't train, and I haven't root-caused it yet. |
 
 Both are built with gcc 14 from FriendlyElec's 6.1.118 config (`olddefconfig`) and include FriendlyElec's out-of-tree `r8125` driver. rk192 has Broadcom wifi (`bcmdhd`) disabled, since it doesn't build against 6.1.192's cfg80211 and the CM3588 has no wifi.
+
+### rk192: ext4 oops in 6.1.192 (fixed in rk192.1)
+
+Stable 6.1.192 backported ext4's mballoc conversion to folios (`d34e4fd4e73f`, `862483175d3d`) and kept upstream's `IS_ERR()` checks. In 6.1, `__filemap_get_folio()` returns NULL, not an `ERR_PTR` (that change came in 6.4), so the checks never fire. Once a block group's buddy or bitmap page has been evicted from the page cache, the next allocation from that group dereferences NULL:
+
+```
+Unable to handle kernel NULL pointer dereference at virtual address 0000000000000000
+Workqueue: writeback wb_workfn (flush-179:0)
+pc : ext4_mb_load_buddy_gfp+0xa8/0x428
+ ext4_mb_find_by_goal <- ext4_mb_regular_allocator <- ext4_mb_new_blocks
+ <- ext4_ext_map_blocks <- ext4_map_blocks <- ext4_writepages <- wb_workfn
+```
+
+This affects any 6.1.192 kernel, not just this tree. On my board it hit the eMMC rootfs (ext4) a few times a day. The oops kills the writeback worker without panicking, so the box locks up rather than rebooting, and nothing makes it to the journal. pstore (`/var/lib/systemd/pstore/`) had the trace.
+
+rk192.1 adds the two fixes queued for 6.1.193, `ext4: fix NULL folio dereference in mballoc` and `ntfs3: fix NULL folio dereference in ntfs_lock_new_page()` (both by Elliot Berman), as [patches/rk192/0015](patches/rk192/0015-ext4-fix-NULL-folio-dereference-in-mballoc.patch) and [0016](patches/rk192/0016-ntfs3-fix-NULL-folio-dereference.patch). I checked the rest of the tree for `IS_ERR()` after a `__filemap_get_folio()` and those were the only two. fsfix2 is FriendlyElec's 6.1.141 with only fs/xfs, overlayfs and iomap picks, so it doesn't have the mballoc conversion and isn't affected.
+
+Reproducer: [tools/ext4-mballoc-repro.sh](tools/ext4-mballoc-repro.sh), on a throwaway ext4 loop image. It writes, drops caches, and writes again. rk192.1 passes 20/20 rounds. ftrace shows it reaches `ext4_mb_init_cache` from `dd`, which only happens after the fast-path folio lookup misses, i.e. the case that oopses on rk192. I haven't run it on rk192 itself, since that would wedge my server.
 
 ### Installing
 
@@ -50,7 +69,7 @@ The kernels are built with gcc 14, and some of the flags they pass need gcc 12 o
 
 The host tools in the headers (`fixdep`, `modpost`, `genksyms`...) are built natively on arm64 against glibc 2.35, so they run on Ubuntu 22.04 and newer.
 
-Tested on the board: a test module built against both kernels and loaded on 6.1.192-rk192, and FriendlyElec's r8125 driver built against the rk192 headers.
+Tested on the board: a test module built against each kernel's headers and loaded on rk192 and rk192.1, and FriendlyElec's r8125 driver built against the rk192 headers.
 
 ## A/B SD card (optional)
 
@@ -62,7 +81,7 @@ It's how both builds here were tested. The gotchas I hit are in the comments of 
 
 ```
 ./build.sh                                # FriendlyElec tree in kernel/ (KSUFFIX=-fsfix2 for that suffix)
-KDIR=wt-rk2 KSUFFIX=-rk192 ./build.sh     # Rockchip + stable tree
+KDIR=wt-rk2 KSUFFIX=-rk192.1 ./build.sh   # Rockchip + stable tree
 tools/mk-deb.sh <kver> <kernel.img|Image> <resource.img> <modules.tar.gz>
 tools/mk-headers.sh <kdir> <kver>          # needs ssh to an arm64 box (ARM_HOST) to build the host tools
 ```
