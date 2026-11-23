@@ -1,14 +1,14 @@
 #!/bin/bash
 # Boot-time diagnostics for test kernels on the A/B SD card (cm3588-kernel tools/).
-#  - 6.1.192-rk192: dump PCIe/GPIO/pinmux state to /root/diag-<kver>-<ts>/, retry the
+#  - 6.1.192-rk192*, 6.1.193-rk193*: dump PCIe/GPIO/pinmux state to /root/diag-<kver>-<ts>/, retry the
 #    r8125 PCIe port (fe190000) with a late re-bind, and reboot (falls back to slot b)
-#    if there's still no eth0, since without the NIC nobody can reach the box.
+#    if there's still no eth0 (lands on the other good slot), since without the NIC nobody can reach the box.
 #  - 6.1.141-fsfix2 on a mixed DTB (the one-off fallback boot that runs on slot a's
 #    DTB, see cm3588-slot status): reboot once more to get slot b's own DTB.
 K=$(uname -r)
 log() { echo "$*" | systemd-cat -t cm3588-bootdiag; echo "$*" >> "$D/run.log"; }
 case "$K" in
-6.1.192-*)
+6.1.192-*|6.1.193-*)
   D=/root/diag-$K-$(date +%Y%m%d-%H%M%S); mkdir -p "$D"
   sleep 20
   dmesg > "$D/dmesg-0.txt"
@@ -30,7 +30,7 @@ case "$K" in
   if ip link show eth0 >/dev/null 2>&1; then
     log "eth0 present, staying up"
   else
-    log "no eth0, rebooting back to slot b"
+    log "no eth0, rebooting (falls back to the good slot)"
     sync; systemctl reboot
   fi ;;
 6.1.141-fsfix2)

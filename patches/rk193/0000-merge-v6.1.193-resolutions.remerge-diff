@@ -1,0 +1,2211 @@
+3347f9df0442083ec398431503783f69e41d2a12
+Merge v6.1.193 into cm3588 rk192 (6.1.192 + board port) for CM3588
+
+Conflict resolutions:
+- Rockchip-forked drivers keep Rockchip's whole file: rockchip-otp,
+  analogix_dp_core, dw_hdmi-rockchip, pcie-rockchip-host (rk3399),
+  rtc-s35390a, ov5648, ov8856, ov8865.
+- arch/arm64/boot/dts/rockchip: Rockchip's whole directory. Stable's
+  rk356x restructure (rk356x.dtsi -> rk356x-base.dtsi) targets mainline's
+  layout, and .193 has no rk3588 DTS changes.
+- irq-gic-v3-its: stable's its_alloc_pages*/itt pool refactor; Rockchip's
+  rk356x GFP_DMA32 quirk moved into its_alloc_pages_node(). Rockchip's
+  rk3588 shareability quirks merged cleanly.
+- rockchip-iommu: both (stable's stale PAGE_FAULT ack, then Rockchip's
+  read_wa label).
+- usb quirks.h: stable's USB_QUIRK_WINDOWS_CONFIG_REQ_SIZE keeps BIT(19);
+  Rockchip's USB_QUIRK_AUTO_SUSPEND moves to BIT(20).
+- uvc_driver: Rockchip's AUTO_SUSPEND blacklist plus stable's
+  UVC_QUIRK_DISABLE_AUTOSUSPEND.
+- sound/core/info.c: stable (guard(mutex) replaces the unlock).
+
+
+diff --git a/arch/arm64/boot/dts/rockchip/rk3328.dtsi b/arch/arm64/boot/dts/rockchip/rk3328.dtsi
+remerge CONFLICT (content): Merge conflict in arch/arm64/boot/dts/rockchip/rk3328.dtsi
+index a1b943785d33..b0f1d2d61162 100644
+--- a/arch/arm64/boot/dts/rockchip/rk3328.dtsi
++++ b/arch/arm64/boot/dts/rockchip/rk3328.dtsi
+@@ -308,11 +308,7 @@ hdmi_sound: hdmi-sound {
+ 		compatible = "simple-audio-card";
+ 		simple-audio-card,format = "i2s";
+ 		simple-audio-card,mclk-fs = <128>;
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ 		simple-audio-card,name = "rockchip,hdmi";
+-=======
+-		simple-audio-card,name = "RK3328 HDMI";
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 		status = "disabled";
+ 
+ 		simple-audio-card,cpu {
+diff --git a/arch/arm64/boot/dts/rockchip/rk3399-firefly.dts b/arch/arm64/boot/dts/rockchip/rk3399-firefly.dts
+index ba2ba5cffe43..c5db64f3e124 100644
+--- a/arch/arm64/boot/dts/rockchip/rk3399-firefly.dts
++++ b/arch/arm64/boot/dts/rockchip/rk3399-firefly.dts
+@@ -96,15 +96,6 @@ key-power {
+ 		};
+ 	};
+ 
+-	/* GPIO that enables the headphone output path */
+-	headphones_amp: headphones-amp {
+-		compatible = "simple-audio-amplifier";
+-		enable-gpios = <&gpio4 RK_PC5 GPIO_ACTIVE_HIGH>;
+-		pinctrl-names = "default";
+-		pinctrl-0 = <&rt5640_hpcon>;
+-		sound-name-prefix = "Headphone Amp";
+-	};
+-
+ 	ir-receiver {
+ 		compatible = "gpio-ir-receiver";
+ 		gpios = <&gpio0 RK_PA6 GPIO_ACTIVE_LOW>;
+@@ -141,11 +132,8 @@ rt5640-sound {
+ 		simple-audio-card,routing =
+ 			"Mic Jack", "MICBIAS1",
+ 			"IN1P", "Mic Jack",
+-			"Headphone Amp INL", "HPOL",
+-			"Headphone Amp INR", "HPOR",
+-			"Headphone Jack", "Headphone Amp OUTL",
+-			"Headphone Jack", "Headphone Amp OUTR";
+-		simple-audio-card,aux-devs = <&headphones_amp>;
++			"Headphone Jack", "HPOL",
++			"Headphone Jack", "HPOR";
+ 
+ 		simple-audio-card,cpu {
+ 			sound-dai = <&i2s1>;
+@@ -559,6 +547,8 @@ rt5640: rt5640@1c {
+ 		clock-names = "mclk";
+ 		realtek,in1-differential;
+ 		#sound-dai-cells = <0>;
++		pinctrl-names = "default";
++		pinctrl-0 = <&rt5640_hpcon>;
+ 	};
+ };
+ 
+@@ -628,9 +618,13 @@ accelerometer@68 {
+ 	};
+ };
+ 
++&i2s0 {
++	rockchip,playback-channels = <8>;
++	rockchip,capture-channels = <8>;
++	status = "okay";
++};
++
+ &i2s1 {
+-	pinctrl-names = "default";
+-	pinctrl-0 = <&i2s_8ch_mclk_pin>, <&i2s1_2ch_bus>;
+ 	rockchip,playback-channels = <2>;
+ 	rockchip,capture-channels = <2>;
+ 	status = "okay";
+@@ -685,12 +679,6 @@ ir_int: ir-int {
+ 		};
+ 	};
+ 
+-	i2s1 {
+-		i2s_8ch_mclk_pin: i2s-8ch-mclk-pin {
+-			rockchip,pins = <4 RK_PA0 1 &pcfg_pull_none>;
+-		};
+-	};
+-
+ 	lcd-panel {
+ 		lcd_panel_reset: lcd-panel-reset {
+ 			rockchip,pins = <4 RK_PD6 RK_FUNC_GPIO &pcfg_pull_up>;
+diff --git a/arch/arm64/boot/dts/rockchip/rk3566-base.dtsi b/arch/arm64/boot/dts/rockchip/rk3566-base.dtsi
+deleted file mode 100644
+index 3c365a1188d7..000000000000
+--- a/arch/arm64/boot/dts/rockchip/rk3566-base.dtsi
++++ /dev/null
+@@ -1,39 +0,0 @@
+-// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+-
+-#include "rk356x-base.dtsi"
+-
+-/ {
+-	compatible = "rockchip,rk3566";
+-};
+-
+-&hdmi_sound {
+-	simple-audio-card,name = "RK3566 HDMI";
+-};
+-
+-&pipegrf {
+-	compatible = "rockchip,rk3566-pipe-grf", "syscon";
+-};
+-
+-&power {
+-	power-domain@RK3568_PD_PIPE {
+-		reg = <RK3568_PD_PIPE>;
+-		clocks = <&cru PCLK_PIPE>;
+-		pm_qos = <&qos_pcie2x1>,
+-			 <&qos_sata1>,
+-			 <&qos_sata2>,
+-			 <&qos_usb3_0>,
+-			 <&qos_usb3_1>;
+-		#power-domain-cells = <0>;
+-	};
+-};
+-
+-&usb_host0_xhci {
+-	phys = <&usb2phy0_otg>;
+-	phy-names = "usb2-phy";
+-	extcon = <&usb2phy0>;
+-	maximum-speed = "high-speed";
+-};
+-
+-&vop {
+-	compatible = "rockchip,rk3566-vop";
+-};
+diff --git a/arch/arm64/boot/dts/rockchip/rk3566.dtsi b/arch/arm64/boot/dts/rockchip/rk3566.dtsi
+remerge CONFLICT (content): Merge conflict in arch/arm64/boot/dts/rockchip/rk3566.dtsi
+index e9181bda3def..4e2a2fb1daaa 100644
+--- a/arch/arm64/boot/dts/rockchip/rk3566.dtsi
++++ b/arch/arm64/boot/dts/rockchip/rk3566.dtsi
+@@ -3,14 +3,12 @@
+  * Copyright (c) 2023 Rockchip Electronics Co., Ltd.
+  */
+ 
+-#include "rk3566-base.dtsi"
++#include "rk356x.dtsi"
+ 
+ / {
+-	cpu0_opp_table: opp-table-0 {
+-		compatible = "operating-points-v2";
+-		opp-shared;
++	compatible = "rockchip,rk3566";
++};
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ &lpddr4_params {
+ 	/* freq info, freq_0 is final frequency, unit: MHz */
+ 	freq_0 = <1056>;
+@@ -24,88 +22,20 @@ &lpddr4x_params {
+ &pipegrf {
+ 	compatible = "rockchip,rk3566-pipe-grf", "syscon";
+ };
+-=======
+-		opp-408000000 {
+-			opp-hz = /bits/ 64 <408000000>;
+-			opp-microvolt = <850000 850000 1150000>;
+-			clock-latency-ns = <40000>;
+-		};
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+-
+-		opp-600000000 {
+-			opp-hz = /bits/ 64 <600000000>;
+-			opp-microvolt = <850000 850000 1150000>;
+-			clock-latency-ns = <40000>;
+-		};
+-
+-		opp-816000000 {
+-			opp-hz = /bits/ 64 <816000000>;
+-			opp-microvolt = <850000 850000 1150000>;
+-			clock-latency-ns = <40000>;
+-			opp-suspend;
+-		};
+-
+-		opp-1104000000 {
+-			opp-hz = /bits/ 64 <1104000000>;
+-			opp-microvolt = <900000 900000 1150000>;
+-			clock-latency-ns = <40000>;
+-		};
+-
+-		opp-1416000000 {
+-			opp-hz = /bits/ 64 <1416000000>;
+-			opp-microvolt = <1025000 1025000 1150000>;
+-			clock-latency-ns = <40000>;
+-		};
+-
+-		opp-1608000000 {
+-			opp-hz = /bits/ 64 <1608000000>;
+-			opp-microvolt = <1100000 1100000 1150000>;
+-			clock-latency-ns = <40000>;
+-		};
+-
+-		opp-1800000000 {
+-			opp-hz = /bits/ 64 <1800000000>;
+-			opp-microvolt = <1150000 1150000 1150000>;
+-			clock-latency-ns = <40000>;
+-		};
+-	};
+-
+-	gpu_opp_table: opp-table-1 {
+-		compatible = "operating-points-v2";
+-
+-		opp-200000000 {
+-			opp-hz = /bits/ 64 <200000000>;
+-			opp-microvolt = <850000 850000 1000000>;
+-		};
+-
+-		opp-300000000 {
+-			opp-hz = /bits/ 64 <300000000>;
+-			opp-microvolt = <850000 850000 1000000>;
+-		};
+ 
+-		opp-400000000 {
+-			opp-hz = /bits/ 64 <400000000>;
+-			opp-microvolt = <850000 850000 1000000>;
+-		};
+-
+-		opp-600000000 {
+-			opp-hz = /bits/ 64 <600000000>;
+-			opp-microvolt = <900000 900000 1000000>;
+-		};
+-
+-		opp-700000000 {
+-			opp-hz = /bits/ 64 <700000000>;
+-			opp-microvolt = <950000 950000 1000000>;
+-		};
+-
+-		opp-800000000 {
+-			opp-hz = /bits/ 64 <800000000>;
+-			opp-microvolt = <1000000 1000000 1000000>;
+-		};
++&power {
++	power-domain@RK3568_PD_PIPE {
++		reg = <RK3568_PD_PIPE>;
++		clocks = <&cru PCLK_PIPE>;
++		pm_qos = <&qos_pcie2x1>,
++			 <&qos_sata1>,
++			 <&qos_sata2>,
++			 <&qos_usb3_0>,
++			 <&qos_usb3_1>;
++		#power-domain-cells = <0>;
+ 	};
+ };
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ &rkisp {
+ 	rockchip,iq-feature = /bits/ 64 <0x1BFBF7FE67FF>;
+ };
+@@ -117,24 +47,4 @@ &usbdrd_dwc3 {
+ 	maximum-speed = "high-speed";
+ 	snps,dis_u2_susphy_quirk;
+ 	snps,usb2-lpm-disable;
+-=======
+-&cpu0 {
+-	operating-points-v2 = <&cpu0_opp_table>;
+-};
+-
+-&cpu1 {
+-	operating-points-v2 = <&cpu0_opp_table>;
+-};
+-
+-&cpu2 {
+-	operating-points-v2 = <&cpu0_opp_table>;
+-};
+-
+-&cpu3 {
+-	operating-points-v2 = <&cpu0_opp_table>;
+-};
+-
+-&gpu {
+-	operating-points-v2 = <&gpu_opp_table>;
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ };
+diff --git a/arch/arm64/boot/dts/rockchip/rk3568.dtsi b/arch/arm64/boot/dts/rockchip/rk3568.dtsi
+remerge CONFLICT (content): Merge conflict in arch/arm64/boot/dts/rockchip/rk3568.dtsi
+index f2cbac128377..52ba325d0368 100644
+--- a/arch/arm64/boot/dts/rockchip/rk3568.dtsi
++++ b/arch/arm64/boot/dts/rockchip/rk3568.dtsi
+@@ -3,12 +3,11 @@
+  * Copyright (c) 2021 Rockchip Electronics Co., Ltd.
+  */
+ 
+-#include "rk356x-base.dtsi"
++#include "rk356x.dtsi"
+ 
+ / {
+ 	compatible = "rockchip,rk3568";
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ 	aliases {
+ 		ethernet0 = &gmac0;
+ 		lvds0 = &lvds;
+@@ -35,94 +34,6 @@ gmac0_xpcsclk: xpcs-gmac0-clock {
+ 		clock-frequency = <125000000>;
+ 		clock-output-names = "clk_gmac0_xpcs_mii";
+ 		#clock-cells = <0>;
+-=======
+-	cpu0_opp_table: opp-table-0 {
+-		compatible = "operating-points-v2";
+-		opp-shared;
+-
+-		opp-408000000 {
+-			opp-hz = /bits/ 64 <408000000>;
+-			opp-microvolt = <850000 850000 1150000>;
+-			clock-latency-ns = <40000>;
+-		};
+-
+-		opp-600000000 {
+-			opp-hz = /bits/ 64 <600000000>;
+-			opp-microvolt = <850000 850000 1150000>;
+-			clock-latency-ns = <40000>;
+-		};
+-
+-		opp-816000000 {
+-			opp-hz = /bits/ 64 <816000000>;
+-			opp-microvolt = <850000 850000 1150000>;
+-			clock-latency-ns = <40000>;
+-			opp-suspend;
+-		};
+-
+-		opp-1104000000 {
+-			opp-hz = /bits/ 64 <1104000000>;
+-			opp-microvolt = <900000 900000 1150000>;
+-			clock-latency-ns = <40000>;
+-		};
+-
+-		opp-1416000000 {
+-			opp-hz = /bits/ 64 <1416000000>;
+-			opp-microvolt = <1025000 1025000 1150000>;
+-			clock-latency-ns = <40000>;
+-		};
+-
+-		opp-1608000000 {
+-			opp-hz = /bits/ 64 <1608000000>;
+-			opp-microvolt = <1100000 1100000 1150000>;
+-			clock-latency-ns = <40000>;
+-		};
+-
+-		opp-1800000000 {
+-			opp-hz = /bits/ 64 <1800000000>;
+-			opp-microvolt = <1150000 1150000 1150000>;
+-			clock-latency-ns = <40000>;
+-		};
+-
+-		opp-1992000000 {
+-			opp-hz = /bits/ 64 <1992000000>;
+-			opp-microvolt = <1150000 1150000 1150000>;
+-			clock-latency-ns = <40000>;
+-		};
+-	};
+-
+-	gpu_opp_table: opp-table-1 {
+-		compatible = "operating-points-v2";
+-
+-		opp-200000000 {
+-			opp-hz = /bits/ 64 <200000000>;
+-			opp-microvolt = <850000 850000 1000000>;
+-		};
+-
+-		opp-300000000 {
+-			opp-hz = /bits/ 64 <300000000>;
+-			opp-microvolt = <850000 850000 1000000>;
+-		};
+-
+-		opp-400000000 {
+-			opp-hz = /bits/ 64 <400000000>;
+-			opp-microvolt = <850000 850000 1000000>;
+-		};
+-
+-		opp-600000000 {
+-			opp-hz = /bits/ 64 <600000000>;
+-			opp-microvolt = <900000 900000 1000000>;
+-		};
+-
+-		opp-700000000 {
+-			opp-hz = /bits/ 64 <700000000>;
+-			opp-microvolt = <950000 950000 1000000>;
+-		};
+-
+-		opp-800000000 {
+-			opp-hz = /bits/ 64 <800000000>;
+-			opp-microvolt = <1000000 1000000 1000000>;
+-		};
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 	};
+ 
+ 	sata0: sata@fc000000 {
+@@ -359,7 +270,6 @@ pcie30phy: phy@fe8c0000 {
+ 	};
+ };
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ &cpu0_opp_table {
+ 	opp-1992000000 {
+ 		opp-supported-hw = <0xf9 0xffff>;
+@@ -535,30 +445,6 @@ opp-m-900000000 {
+ 		opp-hz = /bits/ 64 <900000000>;
+ 		opp-microvolt = <925000 925000 1000000>;
+ 	};
+-=======
+-&cpu0 {
+-	operating-points-v2 = <&cpu0_opp_table>;
+-};
+-
+-&cpu1 {
+-	operating-points-v2 = <&cpu0_opp_table>;
+-};
+-
+-&cpu2 {
+-	operating-points-v2 = <&cpu0_opp_table>;
+-};
+-
+-&cpu3 {
+-	operating-points-v2 = <&cpu0_opp_table>;
+-};
+-
+-&gpu {
+-	operating-points-v2 = <&gpu_opp_table>;
+-};
+-
+-&hdmi_sound {
+-	simple-audio-card,name = "RK3568 HDMI";
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ };
+ 
+ &pipegrf {
+diff --git a/arch/arm64/boot/dts/rockchip/rk356x-base.dtsi b/arch/arm64/boot/dts/rockchip/rk356x.dtsi
+similarity index 97%
+rename from arch/arm64/boot/dts/rockchip/rk356x-base.dtsi
+rename to arch/arm64/boot/dts/rockchip/rk356x.dtsi
+remerge CONFLICT (content): Merge conflict in arch/arm64/boot/dts/rockchip/rk356x-base.dtsi
+index fc73ab28e281..9bc80b6e3410 100644
+--- a/arch/arm64/boot/dts/rockchip/rk356x-base.dtsi
++++ b/arch/arm64/boot/dts/rockchip/rk356x.dtsi
+@@ -70,19 +70,9 @@ cpu0: cpu@0 {
+ 			clocks = <&scmi_clk 0>;
+ 			#cooling-cells = <2>;
+ 			enable-method = "psci";
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec)):arch/arm64/boot/dts/rockchip/rk356x.dtsi
+ 			operating-points-v2 = <&cpu0_opp_table>;
+ 			cpu-idle-states = <&CPU_SLEEP>;
+ 			dynamic-power-coefficient = <187>;
+-=======
+-			i-cache-size = <0x8000>;
+-			i-cache-line-size = <64>;
+-			i-cache-sets = <128>;
+-			d-cache-size = <0x8000>;
+-			d-cache-line-size = <64>;
+-			d-cache-sets = <128>;
+-			next-level-cache = <&l3_cache>;
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193):arch/arm64/boot/dts/rockchip/rk356x-base.dtsi
+ 		};
+ 
+ 		cpu1: cpu@100 {
+@@ -91,18 +81,8 @@ cpu1: cpu@100 {
+ 			reg = <0x0 0x100>;
+ 			#cooling-cells = <2>;
+ 			enable-method = "psci";
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec)):arch/arm64/boot/dts/rockchip/rk356x.dtsi
+ 			operating-points-v2 = <&cpu0_opp_table>;
+ 			cpu-idle-states = <&CPU_SLEEP>;
+-=======
+-			i-cache-size = <0x8000>;
+-			i-cache-line-size = <64>;
+-			i-cache-sets = <128>;
+-			d-cache-size = <0x8000>;
+-			d-cache-line-size = <64>;
+-			d-cache-sets = <128>;
+-			next-level-cache = <&l3_cache>;
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193):arch/arm64/boot/dts/rockchip/rk356x-base.dtsi
+ 		};
+ 
+ 		cpu2: cpu@200 {
+@@ -111,18 +91,8 @@ cpu2: cpu@200 {
+ 			reg = <0x0 0x200>;
+ 			#cooling-cells = <2>;
+ 			enable-method = "psci";
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec)):arch/arm64/boot/dts/rockchip/rk356x.dtsi
+ 			operating-points-v2 = <&cpu0_opp_table>;
+ 			cpu-idle-states = <&CPU_SLEEP>;
+-=======
+-			i-cache-size = <0x8000>;
+-			i-cache-line-size = <64>;
+-			i-cache-sets = <128>;
+-			d-cache-size = <0x8000>;
+-			d-cache-line-size = <64>;
+-			d-cache-sets = <128>;
+-			next-level-cache = <&l3_cache>;
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193):arch/arm64/boot/dts/rockchip/rk356x-base.dtsi
+ 		};
+ 
+ 		cpu3: cpu@300 {
+@@ -131,7 +101,6 @@ cpu3: cpu@300 {
+ 			reg = <0x0 0x300>;
+ 			#cooling-cells = <2>;
+ 			enable-method = "psci";
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec)):arch/arm64/boot/dts/rockchip/rk356x.dtsi
+ 			operating-points-v2 = <&cpu0_opp_table>;
+ 			cpu-idle-states = <&CPU_SLEEP>;
+ 		};
+@@ -249,29 +218,6 @@ opp-1800000000 {
+ 			opp-microvolt-L3 = <1050000 1050000 1150000>;
+ 			clock-latency-ns = <40000>;
+ 		};
+-=======
+-			i-cache-size = <0x8000>;
+-			i-cache-line-size = <64>;
+-			i-cache-sets = <128>;
+-			d-cache-size = <0x8000>;
+-			d-cache-line-size = <64>;
+-			d-cache-sets = <128>;
+-			next-level-cache = <&l3_cache>;
+-		};
+-	};
+-
+-	/*
+-	 * There are no private per-core L2 caches, but only the
+-	 * L3 cache that appears to the CPU cores as L2 caches
+-	 */
+-	l3_cache: l3-cache {
+-		compatible = "cache";
+-		cache-level = <2>;
+-		cache-unified;
+-		cache-size = <0x80000>;
+-		cache-line-size = <64>;
+-		cache-sets = <512>;
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193):arch/arm64/boot/dts/rockchip/rk356x-base.dtsi
+ 	};
+ 
+ 	cpuinfo {
+@@ -368,7 +314,6 @@ sdei: sdei {
+ 		};
+ 	};
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec)):arch/arm64/boot/dts/rockchip/rk356x.dtsi
+ 	gpu_opp_table: opp-table-1 {
+ 		compatible = "operating-points-v2";
+ 
+@@ -443,10 +388,9 @@ opp-800000000 {
+ 		};
+ 	};
+ 
+-=======
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193):arch/arm64/boot/dts/rockchip/rk356x-base.dtsi
+ 	hdmi_sound: hdmi-sound {
+ 		compatible = "simple-audio-card";
++		simple-audio-card,name = "HDMI";
+ 		simple-audio-card,format = "i2s";
+ 		simple-audio-card,mclk-fs = <256>;
+ 		status = "disabled";
+@@ -1333,12 +1277,8 @@ gpu: gpu@fde60000 {
+ 		clock-names = "clk_mali", "clk_gpu";
+ 		power-domains = <&power RK3568_PD_GPU>;
+ 		#cooling-cells = <2>;
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec)):arch/arm64/boot/dts/rockchip/rk356x.dtsi
+ 		operating-points-v2 = <&gpu_opp_table>;
+ 
+-=======
+-		power-domains = <&power RK3568_PD_GPU>;
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193):arch/arm64/boot/dts/rockchip/rk356x-base.dtsi
+ 		status = "disabled";
+ 		gpu_power_model: power-model {
+ 			compatible = "simple-power-model";
+diff --git a/drivers/gpu/drm/bridge/analogix/analogix_dp_core.c b/drivers/gpu/drm/bridge/analogix/analogix_dp_core.c
+remerge CONFLICT (content): Merge conflict in drivers/gpu/drm/bridge/analogix/analogix_dp_core.c
+index d43f71ce111f..25698c70e9fd 100644
+--- a/drivers/gpu/drm/bridge/analogix/analogix_dp_core.c
++++ b/drivers/gpu/drm/bridge/analogix/analogix_dp_core.c
+@@ -2392,13 +2392,9 @@ static int analogix_dp_dt_parse_pdata(struct analogix_dp_device *dp)
+ {
+ 	struct device_node *dp_node = dp->dev->of_node;
+ 	struct video_info *video_info = &dp->video_info;
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ 	struct property *prop;
+ 	int ret, len, num_lanes;
+ 	u32 max_link_rate;
+-=======
+-	u32 val;
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 
+ 	switch (dp->plat_data->dev_type) {
+ 	case RK3288_DP:
+@@ -2421,14 +2417,10 @@ static int analogix_dp_dt_parse_pdata(struct analogix_dp_device *dp)
+ 		 * NOTE: those property parseing code is used for
+ 		 * providing backward compatibility for samsung platform.
+ 		 */
+-		if (of_property_read_u32(dp_node, "samsung,link-rate", &val))
+-			return dev_err_probe(dp->dev, -EINVAL,
+-					     "Failed to get samsung,link-rate\n");
+-		video_info->max_link_rate = val;
+-		if (of_property_read_u32(dp_node, "samsung,lane-count", &val))
+-			return dev_err_probe(dp->dev, -EINVAL,
+-					     "Failed to get samsung,lane-count\n");
+-		video_info->max_lane_count = val;
++		of_property_read_u32(dp_node, "samsung,link-rate",
++				     &video_info->max_link_rate);
++		of_property_read_u32(dp_node, "samsung,lane-count",
++				     &video_info->max_lane_count);
+ 		break;
+ 	}
+ 
+diff --git a/drivers/gpu/drm/rockchip/dw_hdmi-rockchip.c b/drivers/gpu/drm/rockchip/dw_hdmi-rockchip.c
+remerge CONFLICT (content): Merge conflict in drivers/gpu/drm/rockchip/dw_hdmi-rockchip.c
+index 6a830e8197cc..d708e27d4326 100644
+--- a/drivers/gpu/drm/rockchip/dw_hdmi-rockchip.c
++++ b/drivers/gpu/drm/rockchip/dw_hdmi-rockchip.c
+@@ -2541,20 +2541,15 @@ static int __maybe_unused dw_hdmi_rockchip_suspend(struct device *dev)
+ 	return 0;
+ }
+ 
+-static int __maybe_unused dw_hdmi_rockchip_resume_early(struct device *dev)
++static int __maybe_unused dw_hdmi_rockchip_resume(struct device *dev)
+ {
+ 	struct rockchip_hdmi *hdmi = dev_get_drvdata(dev);
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ 	if (hdmi->hpd_gpiod) {
+ 		dw_hdmi_rk3528_gpio_hpd_init(hdmi);
+ 		enable_irq(hdmi->hpd_irq);
+ 	}
+ 	dw_hdmi_resume(hdmi->hdmi);
+-=======
+-	if (hdmi)
+-		dw_hdmi_resume(hdmi->hdmi);
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 
+ 	pm_runtime_get_sync(dev);
+ 
+@@ -2562,12 +2557,8 @@ static int __maybe_unused dw_hdmi_rockchip_resume_early(struct device *dev)
+ }
+ 
+ static const struct dev_pm_ops dw_hdmi_rockchip_pm = {
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ 	SET_SYSTEM_SLEEP_PM_OPS(dw_hdmi_rockchip_suspend,
+ 				dw_hdmi_rockchip_resume)
+-=======
+-	SET_LATE_SYSTEM_SLEEP_PM_OPS(NULL, dw_hdmi_rockchip_resume_early)
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ };
+ 
+ struct platform_driver dw_hdmi_rockchip_pltfm_driver = {
+diff --git a/drivers/iommu/rockchip-iommu.c b/drivers/iommu/rockchip-iommu.c
+remerge CONFLICT (content): Merge conflict in drivers/iommu/rockchip-iommu.c
+index ec9499ac4d4a..1583aa0f5a7d 100644
+--- a/drivers/iommu/rockchip-iommu.c
++++ b/drivers/iommu/rockchip-iommu.c
+@@ -461,9 +461,6 @@ static int rk_iommu_enable_stall(struct rk_iommu *iommu)
+ 	if (!rk_iommu_is_paging_enabled(iommu))
+ 		return 0;
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+-read_wa:
+-=======
+ 	/*
+ 	 * Boot firmware can leave a bank in PAGE_FAULT_ACTIVE with no handler
+ 	 * (PAGE_FAULT_ACTIVE & !STALL_ACTIVE & IDLE).  Such a bank ignores
+@@ -477,7 +474,7 @@ static int rk_iommu_enable_stall(struct rk_iommu *iommu)
+ 			       iommu->bases[i] + RK_MMU_COMMAND);
+ 	}
+ 
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
++read_wa:
+ 	rk_iommu_command(iommu, RK_MMU_CMD_ENABLE_STALL);
+ 	if (iommu->skip_read)
+ 		return 0;
+diff --git a/drivers/irqchip/irq-gic-v3-its.c b/drivers/irqchip/irq-gic-v3-its.c
+remerge CONFLICT (content): Merge conflict in drivers/irqchip/irq-gic-v3-its.c
+index e351ea3f2359..cf20df40e930 100644
+--- a/drivers/irqchip/irq-gic-v3-its.c
++++ b/drivers/irqchip/irq-gic-v3-its.c
+@@ -212,6 +212,11 @@ static struct page *its_alloc_pages_node(int node, gfp_t gfp,
+ 	struct page *page;
+ 	int ret = 0;
+ 
++	/* Rockchip: the rk356x ITS can only address the low 4G */
++	if (of_machine_is_compatible("rockchip,rk3568") ||
++	    of_machine_is_compatible("rockchip,rk3567") ||
++	    of_machine_is_compatible("rockchip,rk3566"))
++		gfp |= GFP_DMA32;
+ 	page = alloc_pages_node(node, gfp, order);
+ 
+ 	if (!page)
+@@ -2277,16 +2282,8 @@ static struct page *its_allocate_prop_table(gfp_t gfp_flags)
+ {
+ 	struct page *prop_page;
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+-	if (of_machine_is_compatible("rockchip,rk3568") ||
+-	    of_machine_is_compatible("rockchip,rk3567") ||
+-	    of_machine_is_compatible("rockchip,rk3566"))
+-		gfp_flags |= GFP_DMA32;
+-	prop_page = alloc_pages(gfp_flags, get_order(LPI_PROPBASE_SZ));
+-=======
+ 	prop_page = its_alloc_pages(gfp_flags,
+ 				    get_order(LPI_PROPBASE_SZ));
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 	if (!prop_page)
+ 		return NULL;
+ 
+@@ -2408,7 +2405,6 @@ static int its_setup_baser(struct its_node *its, struct its_baser *baser,
+ 	u32 alloc_pages, psz;
+ 	struct page *page;
+ 	void *base;
+-	gfp_t gfp_flags;
+ 
+ 	psz = baser->psz;
+ 	alloc_pages = (PAGE_ORDER_TO_SIZE(order) / psz);
+@@ -2420,16 +2416,7 @@ static int its_setup_baser(struct its_node *its, struct its_baser *baser,
+ 		order = get_order(GITS_BASER_PAGES_MAX * psz);
+ 	}
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+-	gfp_flags = GFP_KERNEL | __GFP_ZERO;
+-	if (of_machine_is_compatible("rockchip,rk3568") ||
+-	    of_machine_is_compatible("rockchip,rk3567") ||
+-	    of_machine_is_compatible("rockchip,rk3566"))
+-		gfp_flags |= GFP_DMA32;
+-	page = alloc_pages_node(its->numa_node, gfp_flags, order);
+-=======
+ 	page = its_alloc_pages_node(its->numa_node, GFP_KERNEL | __GFP_ZERO, order);
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 	if (!page)
+ 		return -ENOMEM;
+ 
+@@ -3070,16 +3057,7 @@ static struct page *its_allocate_pending_table(gfp_t gfp_flags)
+ {
+ 	struct page *pend_page;
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+-	if (of_machine_is_compatible("rockchip,rk3568") ||
+-	    of_machine_is_compatible("rockchip,rk3567") ||
+-	    of_machine_is_compatible("rockchip,rk3566"))
+-		gfp_flags |= GFP_DMA32;
+-	pend_page = alloc_pages(gfp_flags | __GFP_ZERO,
+-				get_order(LPI_PENDBASE_SZ));
+-=======
+ 	pend_page = its_alloc_pages(gfp_flags | __GFP_ZERO, get_order(LPI_PENDBASE_SZ));
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 	if (!pend_page)
+ 		return NULL;
+ 
+@@ -3432,19 +3410,8 @@ static bool its_alloc_table_entry(struct its_node *its,
+ 
+ 	/* Allocate memory for 2nd level table */
+ 	if (!table[idx]) {
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+-		gfp_t gfp_flags = GFP_KERNEL | __GFP_ZERO;
+-
+-		if (of_machine_is_compatible("rockchip,rk3568") ||
+-		    of_machine_is_compatible("rockchip,rk3567") ||
+-		    of_machine_is_compatible("rockchip,rk3566"))
+-			gfp_flags |= GFP_DMA32;
+-		page = alloc_pages_node(its->numa_node, gfp_flags,
+-					get_order(baser->psz));
+-=======
+ 		page = its_alloc_pages_node(its->numa_node, GFP_KERNEL | __GFP_ZERO,
+ 					    get_order(baser->psz));
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 		if (!page)
+ 			return false;
+ 
+@@ -3533,7 +3500,6 @@ static struct its_device *its_create_device(struct its_node *its, u32 dev_id,
+ 	int nr_ites;
+ 	int id_bits;
+ 	int sz;
+-	gfp_t gfp_flags;
+ 
+ 	if (!its_alloc_device_table(its, dev_id))
+ 		return NULL;
+@@ -3551,22 +3517,10 @@ static struct its_device *its_create_device(struct its_node *its, u32 dev_id,
+ 	nr_ites = max(2, nvecs);
+ 	sz = nr_ites * (FIELD_GET(GITS_TYPER_ITT_ENTRY_SIZE, its->typer) + 1);
+ 	sz = max(sz, ITS_ITT_ALIGN) + ITS_ITT_ALIGN - 1;
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+-	gfp_flags = GFP_KERNEL;
+-	if (of_machine_is_compatible("rockchip,rk3568") ||
+-	    of_machine_is_compatible("rockchip,rk3567") ||
+-	    of_machine_is_compatible("rockchip,rk3566")) {
+-		gfp_flags |= GFP_DMA32;
+-		itt = (void *)__get_free_pages(gfp_flags, get_order(sz));
+-	} else {
+-		itt = kzalloc_node(sz, gfp_flags, its->numa_node);
+-	}
+-=======
+ 
+ 	itt = itt_alloc_pool(its->numa_node, sz);
+ 
+ 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 
+ 	if (alloc_lpis) {
+ 		lpi_map = its_lpi_alloc(nvecs, &lpi_base, &nr_lpis);
+@@ -3581,18 +3535,7 @@ static struct its_device *its_create_device(struct its_node *its, u32 dev_id,
+ 
+ 	if (!dev || !itt || !col_map || (!lpi_map && alloc_lpis)) {
+ 		kfree(dev);
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+-
+-		if (of_machine_is_compatible("rockchip,rk3568") ||
+-		    of_machine_is_compatible("rockchip,rk3567") ||
+-		    of_machine_is_compatible("rockchip,rk3566"))
+-			free_pages((unsigned long)itt, get_order(sz));
+-		else
+-			kfree(itt);
+-
+-=======
+ 		itt_free_pool(itt, sz);
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 		bitmap_free(lpi_map);
+ 		kfree(col_map);
+ 		return NULL;
+@@ -3630,18 +3573,7 @@ static void its_free_device(struct its_device *its_dev)
+ 	list_del(&its_dev->entry);
+ 	raw_spin_unlock_irqrestore(&its_dev->its->lock, flags);
+ 	kfree(its_dev->event_map.col_map);
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+-
+-	if (of_machine_is_compatible("rockchip,rk3568") ||
+-	    of_machine_is_compatible("rockchip,rk3567") ||
+-	    of_machine_is_compatible("rockchip,rk3566"))
+-		free_pages((unsigned long)its_dev->itt, get_order(its_dev->itt_sz));
+-	else
+-		kfree(its_dev->itt);
+-
+-=======
+ 	itt_free_pool(its_dev->itt, its_dev->itt_sz);
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 	kfree(its_dev);
+ }
+ 
+@@ -5216,7 +5148,6 @@ static int __init its_probe_one(struct its_node *its)
+ 	struct page *page;
+ 	u32 ctlr;
+ 	int err;
+-	gfp_t gfp_flags;
+ 
+ 	its_enable_quirks(its);
+ 
+@@ -5250,21 +5181,9 @@ static int __init its_probe_one(struct its_node *its)
+ 		}
+ 	}
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+-	its->numa_node = numa_node;
+-
+-	gfp_flags = GFP_KERNEL | __GFP_ZERO;
+-	if (of_machine_is_compatible("rockchip,rk3568") ||
+-	    of_machine_is_compatible("rockchip,rk3567") ||
+-	    of_machine_is_compatible("rockchip,rk3566"))
+-		gfp_flags |= GFP_DMA32;
+-	page = alloc_pages_node(its->numa_node, gfp_flags,
+-				get_order(ITS_CMD_QUEUE_SZ));
+-=======
+ 	page = its_alloc_pages_node(its->numa_node,
+ 				    GFP_KERNEL | __GFP_ZERO,
+ 				    get_order(ITS_CMD_QUEUE_SZ));
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 	if (!page) {
+ 		err = -ENOMEM;
+ 		goto out_unmap_sgir;
+diff --git a/drivers/media/i2c/ov5648.c b/drivers/media/i2c/ov5648.c
+remerge CONFLICT (content): Merge conflict in drivers/media/i2c/ov5648.c
+index ad6c62430090..a49ca0e5c679 100644
+--- a/drivers/media/i2c/ov5648.c
++++ b/drivers/media/i2c/ov5648.c
+@@ -1288,21 +1288,7 @@ static int ov5648_check_sensor_id(struct ov5648 *ov5648,
+ 		return -ENODEV;
+ 	}
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ 	dev_info(dev, "Detected OV%06x sensor\n", CHIP_ID);
+-=======
+-	mutex_lock(&sensor->mutex);
+-	ret = ov5648_sw_standby(sensor, !enable);
+-	if (!ret)
+-		state->streaming = !!enable;
+-	mutex_unlock(&sensor->mutex);
+-
+-	if (ret)
+-		return ret;
+-
+-	if (!enable)
+-		pm_runtime_put(sensor->dev);
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 
+ 	return 0;
+ }
+diff --git a/drivers/media/i2c/ov8856.c b/drivers/media/i2c/ov8856.c
+remerge CONFLICT (content): Merge conflict in drivers/media/i2c/ov8856.c
+index 26351904abdc..f5a3e89d6a59 100644
+--- a/drivers/media/i2c/ov8856.c
++++ b/drivers/media/i2c/ov8856.c
+@@ -2040,279 +2040,10 @@ static int ov8856_probe(struct i2c_client *client,
+ #endif
+ err_power_off:
+ 	__ov8856_power_off(ov8856);
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ err_free_handler:
+ 	v4l2_ctrl_handler_free(&ov8856->ctrl_handler);
+ err_destroy_mutex:
+ 	mutex_destroy(&ov8856->mutex);
+-=======
+-	mutex_unlock(&ov8856->mutex);
+-
+-	return 0;
+-}
+-
+-static int __maybe_unused ov8856_resume(struct device *dev)
+-{
+-	struct v4l2_subdev *sd = dev_get_drvdata(dev);
+-	struct ov8856 *ov8856 = to_ov8856(sd);
+-	int ret;
+-
+-	mutex_lock(&ov8856->mutex);
+-
+-	__ov8856_power_on(ov8856);
+-	if (ov8856->streaming) {
+-		ret = ov8856_start_streaming(ov8856);
+-		if (ret) {
+-			ov8856->streaming = false;
+-			ov8856_stop_streaming(ov8856);
+-			mutex_unlock(&ov8856->mutex);
+-			return ret;
+-		}
+-	}
+-
+-	mutex_unlock(&ov8856->mutex);
+-
+-	return 0;
+-}
+-
+-static int ov8856_set_format(struct v4l2_subdev *sd,
+-			     struct v4l2_subdev_state *sd_state,
+-			     struct v4l2_subdev_format *fmt)
+-{
+-	struct ov8856 *ov8856 = to_ov8856(sd);
+-	const struct ov8856_mode *mode;
+-	s32 vblank_def, h_blank;
+-
+-	mode = v4l2_find_nearest_size(ov8856->priv_lane->supported_modes,
+-				      ov8856->modes_size,
+-				      width, height, fmt->format.width,
+-				      fmt->format.height);
+-
+-	mutex_lock(&ov8856->mutex);
+-	ov8856_update_pad_format(ov8856, mode, &fmt->format);
+-	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY) {
+-		*v4l2_subdev_get_try_format(sd, sd_state, fmt->pad) = fmt->format;
+-	} else {
+-		ov8856->cur_mode = mode;
+-		__v4l2_ctrl_s_ctrl(ov8856->link_freq, mode->link_freq_index);
+-		__v4l2_ctrl_s_ctrl_int64(ov8856->pixel_rate,
+-					 to_rate(ov8856->priv_lane->link_freq_menu_items,
+-						 mode->link_freq_index,
+-						 ov8856->cur_mode->data_lanes));
+-
+-		/* Update limits and set FPS to default */
+-		vblank_def = mode->vts_def - mode->height;
+-		__v4l2_ctrl_modify_range(ov8856->vblank,
+-					 mode->vts_min - mode->height,
+-					 OV8856_VTS_MAX - mode->height, 1,
+-					 vblank_def);
+-		__v4l2_ctrl_s_ctrl(ov8856->vblank, vblank_def);
+-		h_blank = to_pixels_per_line(ov8856->priv_lane->link_freq_menu_items,
+-					     mode->hts,
+-					     mode->link_freq_index,
+-					     ov8856->cur_mode->data_lanes)
+-					     - mode->width;
+-		__v4l2_ctrl_modify_range(ov8856->hblank, h_blank, h_blank, 1,
+-					 h_blank);
+-	}
+-
+-	mutex_unlock(&ov8856->mutex);
+-
+-	return 0;
+-}
+-
+-static int ov8856_get_format(struct v4l2_subdev *sd,
+-			     struct v4l2_subdev_state *sd_state,
+-			     struct v4l2_subdev_format *fmt)
+-{
+-	struct ov8856 *ov8856 = to_ov8856(sd);
+-
+-	mutex_lock(&ov8856->mutex);
+-	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY)
+-		fmt->format = *v4l2_subdev_get_try_format(&ov8856->sd,
+-							  sd_state,
+-							  fmt->pad);
+-	else
+-		ov8856_update_pad_format(ov8856, ov8856->cur_mode, &fmt->format);
+-
+-	mutex_unlock(&ov8856->mutex);
+-
+-	return 0;
+-}
+-
+-static int ov8856_enum_mbus_code(struct v4l2_subdev *sd,
+-				 struct v4l2_subdev_state *sd_state,
+-				 struct v4l2_subdev_mbus_code_enum *code)
+-{
+-	if (code->index >= ARRAY_SIZE(ov8856_mbus_codes))
+-		return -EINVAL;
+-
+-	code->code = ov8856_mbus_codes[code->index];
+-
+-	return 0;
+-}
+-
+-static int ov8856_enum_frame_size(struct v4l2_subdev *sd,
+-				  struct v4l2_subdev_state *sd_state,
+-				  struct v4l2_subdev_frame_size_enum *fse)
+-{
+-	struct ov8856 *ov8856 = to_ov8856(sd);
+-	int index;
+-
+-	if (fse->index >= ov8856->modes_size)
+-		return -EINVAL;
+-
+-	for (index = 0; index < ARRAY_SIZE(ov8856_mbus_codes); ++index)
+-		if (fse->code == ov8856_mbus_codes[index])
+-			break;
+-	if (index == ARRAY_SIZE(ov8856_mbus_codes))
+-		return -EINVAL;
+-
+-	fse->min_width = ov8856->priv_lane->supported_modes[fse->index].width;
+-	fse->max_width = fse->min_width;
+-	fse->min_height = ov8856->priv_lane->supported_modes[fse->index].height;
+-	fse->max_height = fse->min_height;
+-
+-	return 0;
+-}
+-
+-static int ov8856_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
+-{
+-	struct ov8856 *ov8856 = to_ov8856(sd);
+-
+-	mutex_lock(&ov8856->mutex);
+-	ov8856_update_pad_format(ov8856, &ov8856->priv_lane->supported_modes[0],
+-				 v4l2_subdev_get_try_format(sd, fh->state, 0));
+-	mutex_unlock(&ov8856->mutex);
+-
+-	return 0;
+-}
+-
+-static const struct v4l2_subdev_video_ops ov8856_video_ops = {
+-	.s_stream = ov8856_set_stream,
+-};
+-
+-static const struct v4l2_subdev_pad_ops ov8856_pad_ops = {
+-	.set_fmt = ov8856_set_format,
+-	.get_fmt = ov8856_get_format,
+-	.enum_mbus_code = ov8856_enum_mbus_code,
+-	.enum_frame_size = ov8856_enum_frame_size,
+-};
+-
+-static const struct v4l2_subdev_ops ov8856_subdev_ops = {
+-	.video = &ov8856_video_ops,
+-	.pad = &ov8856_pad_ops,
+-};
+-
+-static const struct media_entity_operations ov8856_subdev_entity_ops = {
+-	.link_validate = v4l2_subdev_link_validate,
+-};
+-
+-static const struct v4l2_subdev_internal_ops ov8856_internal_ops = {
+-	.open = ov8856_open,
+-};
+-
+-
+-static int ov8856_get_hwcfg(struct ov8856 *ov8856, struct device *dev)
+-{
+-	struct fwnode_handle *ep;
+-	struct fwnode_handle *fwnode = dev_fwnode(dev);
+-	struct v4l2_fwnode_endpoint bus_cfg = {
+-		.bus_type = V4L2_MBUS_CSI2_DPHY
+-	};
+-	u32 xvclk_rate;
+-	int ret;
+-	unsigned int i, j;
+-
+-	if (!fwnode)
+-		return -ENXIO;
+-
+-	ret = fwnode_property_read_u32(fwnode, "clock-frequency", &xvclk_rate);
+-	if (ret)
+-		return ret;
+-
+-	if (!is_acpi_node(fwnode)) {
+-		ov8856->xvclk = devm_clk_get(dev, "xvclk");
+-		if (IS_ERR(ov8856->xvclk)) {
+-			dev_err_probe(dev, PTR_ERR(ov8856->xvclk),
+-				      "could not get xvclk clock\n");
+-			return PTR_ERR(ov8856->xvclk);
+-		}
+-
+-		clk_set_rate(ov8856->xvclk, xvclk_rate);
+-		xvclk_rate = clk_get_rate(ov8856->xvclk);
+-
+-		ov8856->reset_gpio = devm_gpiod_get_optional(dev, "reset",
+-							     GPIOD_OUT_LOW);
+-		if (IS_ERR(ov8856->reset_gpio))
+-			return PTR_ERR(ov8856->reset_gpio);
+-
+-		for (i = 0; i < ARRAY_SIZE(ov8856_supply_names); i++)
+-			ov8856->supplies[i].supply = ov8856_supply_names[i];
+-
+-		ret = devm_regulator_bulk_get(dev,
+-					      ARRAY_SIZE(ov8856_supply_names),
+-					      ov8856->supplies);
+-		if (ret)
+-			return ret;
+-	}
+-
+-	if (xvclk_rate != OV8856_XVCLK_19_2)
+-		dev_warn(dev, "external clock rate %u is unsupported",
+-			 xvclk_rate);
+-
+-	ep = fwnode_graph_get_next_endpoint(fwnode, NULL);
+-	if (!ep)
+-		return -ENXIO;
+-
+-	ret = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
+-	fwnode_handle_put(ep);
+-	if (ret)
+-		return ret;
+-
+-	/* Get number of data lanes */
+-	if (bus_cfg.bus.mipi_csi2.num_data_lanes != 2 &&
+-	    bus_cfg.bus.mipi_csi2.num_data_lanes != 4) {
+-		dev_err(dev, "number of CSI2 data lanes %d is not supported",
+-			bus_cfg.bus.mipi_csi2.num_data_lanes);
+-		ret = -EINVAL;
+-		goto check_hwcfg_error;
+-	}
+-
+-	dev_dbg(dev, "Using %u data lanes\n",
+-		bus_cfg.bus.mipi_csi2.num_data_lanes);
+-
+-	if (bus_cfg.bus.mipi_csi2.num_data_lanes == 2)
+-		ov8856->priv_lane = &lane_cfg_2;
+-	else
+-		ov8856->priv_lane = &lane_cfg_4;
+-
+-	ov8856->modes_size = ov8856_modes_num(ov8856);
+-
+-	if (!bus_cfg.nr_of_link_frequencies) {
+-		dev_err(dev, "no link frequencies defined");
+-		ret = -EINVAL;
+-		goto check_hwcfg_error;
+-	}
+-
+-	for (i = 0; i < ARRAY_SIZE(ov8856->priv_lane->link_freq_menu_items); i++) {
+-		for (j = 0; j < bus_cfg.nr_of_link_frequencies; j++) {
+-			if (ov8856->priv_lane->link_freq_menu_items[i] ==
+-			    bus_cfg.link_frequencies[j])
+-				break;
+-		}
+-
+-		if (j == bus_cfg.nr_of_link_frequencies) {
+-			dev_err(dev, "no link frequency %lld supported",
+-				ov8856->priv_lane->link_freq_menu_items[i]);
+-			ret = -EINVAL;
+-			goto check_hwcfg_error;
+-		}
+-	}
+-
+-check_hwcfg_error:
+-	v4l2_fwnode_endpoint_free(&bus_cfg);
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 
+ 	return ret;
+ }
+diff --git a/drivers/media/i2c/ov8865.c b/drivers/media/i2c/ov8865.c
+remerge CONFLICT (content): Merge conflict in drivers/media/i2c/ov8865.c
+index 3f2819228f7d..25aff0a8d307 100644
+--- a/drivers/media/i2c/ov8865.c
++++ b/drivers/media/i2c/ov8865.c
+@@ -1399,15 +1399,9 @@ static int ov8865_initialize_controls(struct ov8865 *ov8865)
+ static int ov8865_check_sensor_id(struct ov8865 *ov8865,
+ 				   struct i2c_client *client)
+ {
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ 	struct device *dev = &ov8865->client->dev;
+ 	u32 id = 0;
+ 	int ret;
+-=======
+-	struct ov8865_sensor *sensor = ov8865_subdev_sensor(subdev);
+-	struct ov8865_state *state = &sensor->state;
+-	int ret = 0;
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 
+ 	ret = ov8865_read_reg(client, OV8865_REG_CHIP_ID,
+ 			       OV8865_REG_VALUE_24BIT, &id);
+@@ -1416,7 +1410,6 @@ static int ov8865_check_sensor_id(struct ov8865 *ov8865,
+ 		return -ENODEV;
+ 	}
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ 	ret = ov8865_read_reg(client, OV8865_CHIP_REVISION_REG,
+ 			       OV8865_REG_VALUE_08BIT, &id);
+ 	if (ret) {
+@@ -1424,35 +1417,8 @@ static int ov8865_check_sensor_id(struct ov8865 *ov8865,
+ 		return -ENODEV;
+ 	}
+ 	dev_info(dev, "Detected OV%06x sensor, REVISION 0x%x\n", CHIP_ID, id);
+-=======
+-	mutex_lock(&sensor->mutex);
+-
+-	/*
+-	 * The sensor may have been kept powered by something else (e.g. the
+-	 * VCM's runtime PM device link on IPU3 platforms), in which case
+-	 * runtime resume did not run and the hardware may still be
+-	 * configured for a previous mode. Always program the negotiated
+-	 * configuration on stream start.
+-	 */
+-	if (enable) {
+-		ret = ov8865_sensor_init(sensor);
+-		if (!ret)
+-			ret = __v4l2_ctrl_handler_setup(&sensor->ctrls.handler);
+-	}
+-
+-	if (!ret)
+-		ret = ov8865_sw_standby(sensor, !enable);
+ 
+-	mutex_unlock(&sensor->mutex);
+-
+-	if (ret || !enable)
+-		pm_runtime_put(sensor->dev);
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+-
+-	if (!ret)
+-		state->streaming = enable;
+-
+-	return ret;
++	return 0;
+ }
+ 
+ static int ov8865_configure_regulators(struct ov8865 *ov8865)
+@@ -1467,290 +1433,8 @@ static int ov8865_configure_regulators(struct ov8865 *ov8865)
+ 				       ov8865->supplies);
+ }
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ static int ov8865_probe(struct i2c_client *client,
+ 			 const struct i2c_device_id *id)
+-=======
+-static const struct v4l2_subdev_video_ops ov8865_subdev_video_ops = {
+-	.s_stream		= ov8865_s_stream,
+-	.g_frame_interval	= ov8865_g_frame_interval,
+-	.s_frame_interval	= ov8865_g_frame_interval,
+-};
+-
+-/* Subdev Pad Operations */
+-
+-static int ov8865_enum_mbus_code(struct v4l2_subdev *subdev,
+-				 struct v4l2_subdev_state *sd_state,
+-				 struct v4l2_subdev_mbus_code_enum *code_enum)
+-{
+-	if (code_enum->index >= ARRAY_SIZE(ov8865_mbus_codes))
+-		return -EINVAL;
+-
+-	code_enum->code = ov8865_mbus_codes[code_enum->index];
+-
+-	return 0;
+-}
+-
+-static void ov8865_mbus_format_fill(struct v4l2_mbus_framefmt *mbus_format,
+-				    u32 mbus_code,
+-				    const struct ov8865_mode *mode)
+-{
+-	mbus_format->width = mode->output_size_x;
+-	mbus_format->height = mode->output_size_y;
+-	mbus_format->code = mbus_code;
+-
+-	mbus_format->field = V4L2_FIELD_NONE;
+-	mbus_format->colorspace = V4L2_COLORSPACE_RAW;
+-	mbus_format->ycbcr_enc =
+-		V4L2_MAP_YCBCR_ENC_DEFAULT(mbus_format->colorspace);
+-	mbus_format->quantization = V4L2_QUANTIZATION_FULL_RANGE;
+-	mbus_format->xfer_func =
+-		V4L2_MAP_XFER_FUNC_DEFAULT(mbus_format->colorspace);
+-}
+-
+-static int ov8865_get_fmt(struct v4l2_subdev *subdev,
+-			  struct v4l2_subdev_state *sd_state,
+-			  struct v4l2_subdev_format *format)
+-{
+-	struct ov8865_sensor *sensor = ov8865_subdev_sensor(subdev);
+-	struct v4l2_mbus_framefmt *mbus_format = &format->format;
+-
+-	mutex_lock(&sensor->mutex);
+-
+-	if (format->which == V4L2_SUBDEV_FORMAT_TRY)
+-		*mbus_format = *v4l2_subdev_get_try_format(subdev, sd_state,
+-							   format->pad);
+-	else
+-		ov8865_mbus_format_fill(mbus_format, sensor->state.mbus_code,
+-					sensor->state.mode);
+-
+-	mutex_unlock(&sensor->mutex);
+-
+-	return 0;
+-}
+-
+-static int ov8865_set_fmt(struct v4l2_subdev *subdev,
+-			  struct v4l2_subdev_state *sd_state,
+-			  struct v4l2_subdev_format *format)
+-{
+-	struct ov8865_sensor *sensor = ov8865_subdev_sensor(subdev);
+-	struct v4l2_mbus_framefmt *mbus_format = &format->format;
+-	const struct ov8865_mode *mode;
+-	u32 mbus_code = 0;
+-	unsigned int hblank;
+-	unsigned int index;
+-	int exposure_max;
+-	int ret = 0;
+-
+-	mutex_lock(&sensor->mutex);
+-
+-	if (sensor->state.streaming) {
+-		ret = -EBUSY;
+-		goto complete;
+-	}
+-
+-	/* Try to find requested mbus code. */
+-	for (index = 0; index < ARRAY_SIZE(ov8865_mbus_codes); index++) {
+-		if (ov8865_mbus_codes[index] == mbus_format->code) {
+-			mbus_code = mbus_format->code;
+-			break;
+-		}
+-	}
+-
+-	/* Fallback to default. */
+-	if (!mbus_code)
+-		mbus_code = ov8865_mbus_codes[0];
+-
+-	/* Find the mode with nearest dimensions. */
+-	mode = v4l2_find_nearest_size(ov8865_modes, ARRAY_SIZE(ov8865_modes),
+-				      output_size_x, output_size_y,
+-				      mbus_format->width, mbus_format->height);
+-	if (!mode) {
+-		ret = -EINVAL;
+-		goto complete;
+-	}
+-
+-	ov8865_mbus_format_fill(mbus_format, mbus_code, mode);
+-
+-	if (format->which == V4L2_SUBDEV_FORMAT_TRY)
+-		*v4l2_subdev_get_try_format(subdev, sd_state, format->pad) =
+-			*mbus_format;
+-	else if (sensor->state.mode != mode ||
+-		 sensor->state.mbus_code != mbus_code)
+-		ret = ov8865_state_configure(sensor, mode, mbus_code);
+-
+-	__v4l2_ctrl_modify_range(sensor->ctrls.vblank, OV8865_TIMING_MIN_VTS,
+-				 OV8865_TIMING_MAX_VTS - mode->output_size_y,
+-				 1, mode->vts - mode->output_size_y);
+-
+-	hblank = mode->hts - mode->output_size_x;
+-	__v4l2_ctrl_modify_range(sensor->ctrls.hblank, hblank, hblank, 1,
+-				 hblank);
+-
+-	exposure_max = mode->vts - OV8865_INTEGRATION_TIME_MARGIN;
+-	__v4l2_ctrl_modify_range(sensor->ctrls.exposure,
+-				 sensor->ctrls.exposure->minimum, exposure_max,
+-				 sensor->ctrls.exposure->step,
+-				 min(sensor->ctrls.exposure->val,
+-				     exposure_max));
+-
+-complete:
+-	mutex_unlock(&sensor->mutex);
+-
+-	return ret;
+-}
+-
+-static int ov8865_enum_frame_size(struct v4l2_subdev *subdev,
+-				  struct v4l2_subdev_state *sd_state,
+-				  struct v4l2_subdev_frame_size_enum *size_enum)
+-{
+-	const struct ov8865_mode *mode;
+-
+-	if (size_enum->index >= ARRAY_SIZE(ov8865_modes))
+-		return -EINVAL;
+-
+-	mode = &ov8865_modes[size_enum->index];
+-
+-	size_enum->min_width = size_enum->max_width = mode->output_size_x;
+-	size_enum->min_height = size_enum->max_height = mode->output_size_y;
+-
+-	return 0;
+-}
+-
+-static void
+-__ov8865_get_pad_crop(struct ov8865_sensor *sensor,
+-		      struct v4l2_subdev_state *state, unsigned int pad,
+-		      enum v4l2_subdev_format_whence which, struct v4l2_rect *r)
+-{
+-	const struct ov8865_mode *mode = sensor->state.mode;
+-
+-	switch (which) {
+-	case V4L2_SUBDEV_FORMAT_TRY:
+-		*r = *v4l2_subdev_get_try_crop(&sensor->subdev, state, pad);
+-		break;
+-	case V4L2_SUBDEV_FORMAT_ACTIVE:
+-		r->height = mode->output_size_y;
+-		r->width = mode->output_size_x;
+-		r->top = (OV8865_NATIVE_HEIGHT - mode->output_size_y) / 2;
+-		r->left = (OV8865_NATIVE_WIDTH - mode->output_size_x) / 2;
+-		break;
+-	}
+-}
+-
+-static int ov8865_get_selection(struct v4l2_subdev *subdev,
+-				struct v4l2_subdev_state *state,
+-				struct v4l2_subdev_selection *sel)
+-{
+-	struct ov8865_sensor *sensor = ov8865_subdev_sensor(subdev);
+-
+-	switch (sel->target) {
+-	case V4L2_SEL_TGT_CROP:
+-		mutex_lock(&sensor->mutex);
+-		__ov8865_get_pad_crop(sensor, state, sel->pad,
+-				      sel->which, &sel->r);
+-		mutex_unlock(&sensor->mutex);
+-		break;
+-	case V4L2_SEL_TGT_NATIVE_SIZE:
+-		sel->r.top = 0;
+-		sel->r.left = 0;
+-		sel->r.width = OV8865_NATIVE_WIDTH;
+-		sel->r.height = OV8865_NATIVE_HEIGHT;
+-		break;
+-	case V4L2_SEL_TGT_CROP_BOUNDS:
+-	case V4L2_SEL_TGT_CROP_DEFAULT:
+-		sel->r.top = OV8865_ACTIVE_START_TOP;
+-		sel->r.left = OV8865_ACTIVE_START_LEFT;
+-		sel->r.width = OV8865_ACTIVE_WIDTH;
+-		sel->r.height = OV8865_ACTIVE_HEIGHT;
+-		break;
+-	default:
+-		return -EINVAL;
+-	}
+-
+-	return 0;
+-}
+-
+-static const struct v4l2_subdev_pad_ops ov8865_subdev_pad_ops = {
+-	.enum_mbus_code		= ov8865_enum_mbus_code,
+-	.get_fmt		= ov8865_get_fmt,
+-	.set_fmt		= ov8865_set_fmt,
+-	.enum_frame_size	= ov8865_enum_frame_size,
+-	.get_selection		= ov8865_get_selection,
+-	.set_selection		= ov8865_get_selection,
+-};
+-
+-static const struct v4l2_subdev_ops ov8865_subdev_ops = {
+-	.video		= &ov8865_subdev_video_ops,
+-	.pad		= &ov8865_subdev_pad_ops,
+-};
+-
+-static int ov8865_suspend(struct device *dev)
+-{
+-	struct i2c_client *client = to_i2c_client(dev);
+-	struct v4l2_subdev *subdev = i2c_get_clientdata(client);
+-	struct ov8865_sensor *sensor = ov8865_subdev_sensor(subdev);
+-	struct ov8865_state *state = &sensor->state;
+-	int ret = 0;
+-
+-	mutex_lock(&sensor->mutex);
+-
+-	if (state->streaming) {
+-		ret = ov8865_sw_standby(sensor, true);
+-		if (ret)
+-			goto complete;
+-	}
+-
+-	ret = ov8865_sensor_power(sensor, false);
+-	if (ret)
+-		ov8865_sw_standby(sensor, false);
+-
+-complete:
+-	mutex_unlock(&sensor->mutex);
+-
+-	return ret;
+-}
+-
+-static int ov8865_resume(struct device *dev)
+-{
+-	struct i2c_client *client = to_i2c_client(dev);
+-	struct v4l2_subdev *subdev = i2c_get_clientdata(client);
+-	struct ov8865_sensor *sensor = ov8865_subdev_sensor(subdev);
+-	struct ov8865_state *state = &sensor->state;
+-	int ret = 0;
+-
+-	mutex_lock(&sensor->mutex);
+-
+-	ret = ov8865_sensor_power(sensor, true);
+-	if (ret)
+-		goto complete;
+-
+-	if (state->streaming) {
+-		ret = ov8865_sensor_init(sensor);
+-		if (ret)
+-			goto error_power;
+-
+-		ret = __v4l2_ctrl_handler_setup(&sensor->ctrls.handler);
+-		if (ret)
+-			goto error_power;
+-
+-		ret = ov8865_sw_standby(sensor, false);
+-		if (ret)
+-			goto error_power;
+-	}
+-
+-	goto complete;
+-
+-error_power:
+-	ov8865_sensor_power(sensor, false);
+-
+-complete:
+-	mutex_unlock(&sensor->mutex);
+-
+-	return ret;
+-}
+-
+-static int ov8865_probe(struct i2c_client *client)
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ {
+ 	struct device *dev = &client->dev;
+ 	struct device_node *node = dev->of_node;
+diff --git a/drivers/media/usb/uvc/uvc_driver.c b/drivers/media/usb/uvc/uvc_driver.c
+remerge CONFLICT (content): Merge conflict in drivers/media/usb/uvc/uvc_driver.c
+index b9c178fac16c..84c8f8842c48 100644
+--- a/drivers/media/usb/uvc/uvc_driver.c
++++ b/drivers/media/usb/uvc/uvc_driver.c
+@@ -2297,19 +2297,13 @@ static int uvc_probe(struct usb_interface *intf,
+ 		goto error;
+ 	}
+ 
+-	if (!(dev->quirks & UVC_QUIRK_DISABLE_AUTOSUSPEND))
+-		usb_enable_autosuspend(udev);
+-
+ 	uvc_dbg(dev, PROBE, "UVC device initialized\n");
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ 	if (udev->quirks & USB_QUIRK_AUTO_SUSPEND ||
+ 	    udev->parent->quirks & USB_QUIRK_AUTO_SUSPEND)
+ 		dev_info(&dev->udev->dev, "auto-suspend is blacklisted for this device\n");
+-	else
++	else if (!(dev->quirks & UVC_QUIRK_DISABLE_AUTOSUSPEND))
+ 		usb_enable_autosuspend(udev);
+-=======
+ 
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 	return 0;
+ 
+ error:
+diff --git a/drivers/nvmem/rockchip-otp.c b/drivers/nvmem/rockchip-otp.c
+remerge CONFLICT (content): Merge conflict in drivers/nvmem/rockchip-otp.c
+index 60b22f317d9a..9c6c1f258b19 100644
+--- a/drivers/nvmem/rockchip-otp.c
++++ b/drivers/nvmem/rockchip-otp.c
+@@ -13,7 +13,6 @@
+ #include <linux/io.h>
+ #include <linux/iopoll.h>
+ #include <linux/module.h>
+-#include <linux/mutex.h>
+ #include <linux/nvmem-provider.h>
+ #include <linux/reset.h>
+ #include <linux/rockchip/cpu.h>
+@@ -182,18 +181,12 @@ MODULE_PARM_DESC(rockchip_otp_wr_magic, "magic for enable otp write func.");
+ 
+ struct rockchip_data;
+ 
+-struct rockchip_data {
+-	int size;
+-	const char * const *clks;
+-	int num_clks;
+-	nvmem_reg_read_t reg_read;
+-};
+-
+ struct rockchip_otp {
+ 	struct device *dev;
+ 	void __iomem *base;
++	struct clk_bulk_data	*clks;
++	int num_clks;
+ 	struct reset_control *rst;
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ 	struct nvmem_config *config;
+ 	const struct rockchip_data *data;
+ 	struct hwspinlock *hwlock;
+@@ -208,12 +201,6 @@ struct rockchip_data {
+ 	nvmem_reg_read_t reg_read;
+ 	nvmem_reg_write_t reg_write;
+ 	int (*init)(struct rockchip_otp *otp);
+-=======
+-	const struct rockchip_data *data;
+-	/* Serializes access to the OTP controller state machine */
+-	struct mutex mutex;
+-	struct clk_bulk_data clks[];
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ };
+ 
+ static int rockchip_otp_reset(struct rockchip_otp *otp)
+@@ -277,28 +264,29 @@ static int px30_otp_ecc_enable(struct rockchip_otp *otp, bool enable)
+ 	return ret;
+ }
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ static int px30_otp_read(void *context, unsigned int offset, void *val,
+ 			 size_t bytes)
+-=======
+-static int px30_otp_read(void *context, unsigned int offset,
+-			 void *val, size_t bytes)
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ {
+ 	struct rockchip_otp *otp = context;
+ 	u8 *buf = val;
+-	int ret;
++	int ret = 0;
++
++	ret = clk_bulk_prepare_enable(otp->num_clks, otp->clks);
++	if (ret < 0) {
++		dev_err(otp->dev, "failed to prepare/enable clks\n");
++		return ret;
++	}
+ 
+ 	ret = rockchip_otp_reset(otp);
+ 	if (ret) {
+ 		dev_err(otp->dev, "failed to reset otp phy\n");
+-		return ret;
++		goto disable_clks;
+ 	}
+ 
+ 	ret = px30_otp_ecc_enable(otp, false);
+ 	if (ret < 0) {
+ 		dev_err(otp->dev, "rockchip_otp_ecc_enable err\n");
+-		return ret;
++		goto disable_clks;
+ 	}
+ 
+ 	writel(OTPC_USE_USER | OTPC_USE_USER_MASK, otp->base + OTPC_USER_CTRL);
+@@ -318,33 +306,8 @@ static int px30_otp_read(void *context, unsigned int offset,
+ 
+ read_end:
+ 	writel(0x0 | OTPC_USE_USER_MASK, otp->base + OTPC_USER_CTRL);
+-
+-	return ret;
+-}
+-
+-static int rockchip_otp_read(void *context, unsigned int offset,
+-			     void *val, size_t bytes)
+-{
+-	struct rockchip_otp *otp = context;
+-	int ret;
+-
+-	if (!otp->data || !otp->data->reg_read)
+-		return -EINVAL;
+-
+-	mutex_lock(&otp->mutex);
+-
+-	ret = clk_bulk_prepare_enable(otp->data->num_clks, otp->clks);
+-	if (ret < 0) {
+-		dev_err(otp->dev, "failed to prepare/enable clks\n");
+-		goto unlock;
+-	}
+-
+-	ret = otp->data->reg_read(context, offset, val, bytes);
+-
+-	clk_bulk_disable_unprepare(otp->data->num_clks, otp->clks);
+-
+-unlock:
+-	mutex_unlock(&otp->mutex);
++disable_clks:
++	clk_bulk_disable_unprepare(otp->num_clks, otp->clks);
+ 
+ 	return ret;
+ }
+@@ -996,13 +959,8 @@ static const char * const px30_otp_clocks[] = {
+ 	"otp", "apb_pclk", "phy",
+ };
+ 
+-static const char * const px30_otp_clocks[] = {
+-	"otp", "apb_pclk", "phy",
+-};
+-
+ static const struct rockchip_data px30_data = {
+ 	.size = 0x40,
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ 	.clocks = px30_otp_clocks,
+ 	.num_clks = ARRAY_SIZE(px30_otp_clocks),
+ 	.reg_read = px30_otp_read,
+@@ -1111,11 +1069,6 @@ static const struct rockchip_data rv1126b_data = {
+ 	.clocks = rk3568_otp_clocks,
+ 	.num_clks = ARRAY_SIZE(rk3568_otp_clocks),
+ 	.reg_read = rk3568_otp_read,
+-=======
+-	.clks = px30_otp_clocks,
+-	.num_clks = ARRAY_SIZE(px30_otp_clocks),
+-	.reg_read = px30_otp_read,
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ };
+ 
+ static const struct of_device_id rockchip_otp_match[] = {
+@@ -1219,23 +1172,17 @@ static int rockchip_otp_probe(struct platform_device *pdev)
+ 	if (soc_is_px30s() || soc_is_rk3308bs())
+ 		data = &px30s_data;
+ 
+-	otp = devm_kzalloc(&pdev->dev, struct_size(otp, clks, data->num_clks),
++	otp = devm_kzalloc(&pdev->dev, sizeof(struct rockchip_otp),
+ 			   GFP_KERNEL);
+ 	if (!otp)
+ 		return -ENOMEM;
+ 
+ 	otp->data = data;
+ 	otp->dev = dev;
+-
+-	ret = devm_mutex_init(dev, &otp->mutex);
+-	if (ret)
+-		return ret;
+-
+ 	otp->base = devm_platform_ioremap_resource(pdev, 0);
+ 	if (IS_ERR(otp->base))
+ 		return PTR_ERR(otp->base);
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ 	ret = of_hwspin_lock_get_id(dev->of_node, 0);
+ 	if (ret >= 0)
+ 		otp->hwlock = devm_hwspin_lock_request_specific(dev, ret);
+@@ -1250,12 +1197,6 @@ static int rockchip_otp_probe(struct platform_device *pdev)
+ 		otp->clks[i].id = data->clocks[i];
+ 
+ 	ret = devm_clk_bulk_get(dev, otp->num_clks, otp->clks);
+-=======
+-	for (i = 0; i < data->num_clks; ++i)
+-		otp->clks[i].id = data->clks[i];
+-
+-	ret = devm_clk_bulk_get(dev, data->num_clks, otp->clks);
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 	if (ret)
+ 		return ret;
+ 
+diff --git a/drivers/pci/controller/pcie-rockchip-host.c b/drivers/pci/controller/pcie-rockchip-host.c
+remerge CONFLICT (content): Merge conflict in drivers/pci/controller/pcie-rockchip-host.c
+index ec54c0ce6a88..991818fd0b18 100644
+--- a/drivers/pci/controller/pcie-rockchip-host.c
++++ b/drivers/pci/controller/pcie-rockchip-host.c
+@@ -378,7 +378,6 @@ static int rockchip_pcie_host_init_port(struct rockchip_pcie *rockchip)
+ 		goto err_power_off_phy;
+ 	}
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ 	err = readl_poll_timeout(rockchip->apb_base + PCIE_CLIENT_DEBUG_OUT_0,
+ 				 status, PCIE_LINK_IS_L0(status), 20,
+ 				 timeouts * USEC_PER_MSEC);
+@@ -407,8 +406,6 @@ static int rockchip_pcie_host_init_port(struct rockchip_pcie *rockchip)
+ 			dev_dbg(dev, "PCIe link training gen2 timeout, fall back to gen1!\n");
+ 	}
+ 
+-=======
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 	/* Check the final link width from negotiated lane counter from MGMT */
+ 	status = rockchip_pcie_read(rockchip, PCIE_CORE_CTRL);
+ 	status = 0x1 << ((status & PCIE_CORE_PL_CONF_LANE_MASK) >>
+diff --git a/drivers/rtc/rtc-s35390a.c b/drivers/rtc/rtc-s35390a.c
+remerge CONFLICT (content): Merge conflict in drivers/rtc/rtc-s35390a.c
+index 101fac2e33b2..dc3248ffa3cc 100644
+--- a/drivers/rtc/rtc-s35390a.c
++++ b/drivers/rtc/rtc-s35390a.c
+@@ -65,9 +65,11 @@ MODULE_DEVICE_TABLE(of, s35390a_of_match);
+ 
+ struct s35390a {
+ 	struct i2c_client *client[8];
++	struct rtc_device *rtc;
++	int twentyfourhour;
+ };
+ 
+-static int s35390a_set_reg(struct s35390a *s35390a, int reg, u8  *buf, int len)
++static int s35390a_set_reg(struct s35390a *s35390a, int reg, char *buf, int len)
+ {
+ 	struct i2c_client *client = s35390a->client[reg];
+ 	struct i2c_msg msg[] = {
+@@ -84,7 +86,7 @@ static int s35390a_set_reg(struct s35390a *s35390a, int reg, u8  *buf, int len)
+ 	return 0;
+ }
+ 
+-static int s35390a_get_reg(struct s35390a *s35390a, int reg, u8 *buf, int len)
++static int s35390a_get_reg(struct s35390a *s35390a, int reg, char *buf, int len)
+ {
+ 	struct i2c_client *client = s35390a->client[reg];
+ 	struct i2c_msg msg[] = {
+@@ -102,8 +104,9 @@ static int s35390a_get_reg(struct s35390a *s35390a, int reg, u8 *buf, int len)
+ 	return 0;
+ }
+ 
+-static int s35390a_init(struct s35390a *s35390a, u8 *sts)
++static int s35390a_init(struct s35390a *s35390a)
+ {
++	u8 buf;
+ 	int ret;
+ 	unsigned initcount = 0;
+ 
+@@ -116,17 +119,17 @@ static int s35390a_init(struct s35390a *s35390a, u8 *sts)
+ 	 * The 24H bit is kept over reset, so set it already here.
+ 	 */
+ initialize:
+-	*sts = S35390A_FLAG_RESET | S35390A_FLAG_24H;
+-	ret = s35390a_set_reg(s35390a, S35390A_CMD_STATUS1, sts, 1);
++	buf = S35390A_FLAG_RESET | S35390A_FLAG_24H;
++	ret = s35390a_set_reg(s35390a, S35390A_CMD_STATUS1, &buf, 1);
+ 
+ 	if (ret < 0)
+ 		return ret;
+ 
+-	ret = s35390a_get_reg(s35390a, S35390A_CMD_STATUS1, sts, 1);
++	ret = s35390a_get_reg(s35390a, S35390A_CMD_STATUS1, &buf, 1);
+ 	if (ret < 0)
+ 		return ret;
+ 
+-	if (*sts & (S35390A_FLAG_POC | S35390A_FLAG_BLD)) {
++	if (buf & (S35390A_FLAG_POC | S35390A_FLAG_BLD)) {
+ 		/* Try up to five times to reset the chip */
+ 		if (initcount < 5) {
+ 			++initcount;
+@@ -168,7 +171,7 @@ static int s35390a_read_status(struct s35390a *s35390a, char *status1)
+ 
+ static int s35390a_disable_test_mode(struct s35390a *s35390a)
+ {
+-	u8 buf[1];
++	char buf[1];
+ 
+ 	if (s35390a_get_reg(s35390a, S35390A_CMD_STATUS2, buf, sizeof(buf)) < 0)
+ 		return -EIO;
+@@ -180,9 +183,9 @@ static int s35390a_disable_test_mode(struct s35390a *s35390a)
+ 	return s35390a_set_reg(s35390a, S35390A_CMD_STATUS2, buf, sizeof(buf));
+ }
+ 
+-static char s35390a_hr2reg(int hour, bool twentyfourhour)
++static char s35390a_hr2reg(struct s35390a *s35390a, int hour)
+ {
+-	if (twentyfourhour)
++	if (s35390a->twentyfourhour)
+ 		return bin2bcd(hour);
+ 
+ 	if (hour < 12)
+@@ -191,11 +194,11 @@ static char s35390a_hr2reg(int hour, bool twentyfourhour)
+ 	return 0x40 | bin2bcd(hour - 12);
+ }
+ 
+-static int s35390a_reg2hr(char reg, bool twentyfourhour)
++static int s35390a_reg2hr(struct s35390a *s35390a, char reg)
+ {
+ 	unsigned hour;
+ 
+-	if (twentyfourhour)
++	if (s35390a->twentyfourhour)
+ 		return bcd2bin(reg & 0x3f);
+ 
+ 	hour = bcd2bin(reg & 0x3f);
+@@ -210,25 +213,21 @@ static int s35390a_rtc_set_time(struct device *dev, struct rtc_time *tm)
+ 	struct i2c_client *client = to_i2c_client(dev);
+ 	struct s35390a	*s35390a = i2c_get_clientdata(client);
+ 	int i, err;
+-	u8 buf[7], status;
++	char buf[7], status;
+ 
+ 	dev_dbg(&client->dev, "%s: tm is secs=%d, mins=%d, hours=%d mday=%d, "
+ 		"mon=%d, year=%d, wday=%d\n", __func__, tm->tm_sec,
+ 		tm->tm_min, tm->tm_hour, tm->tm_mday, tm->tm_mon, tm->tm_year,
+ 		tm->tm_wday);
+ 
+-	err = s35390a_read_status(s35390a, &status);
+-	if (err == 1)
+-		err = s35390a_init(s35390a, &status);
+-
+-	if (err < 0)
+-		return err;
++	if (s35390a_read_status(s35390a, &status) == 1)
++		s35390a_init(s35390a);
+ 
+ 	buf[S35390A_BYTE_YEAR] = bin2bcd(tm->tm_year - 100);
+ 	buf[S35390A_BYTE_MONTH] = bin2bcd(tm->tm_mon + 1);
+ 	buf[S35390A_BYTE_DAY] = bin2bcd(tm->tm_mday);
+ 	buf[S35390A_BYTE_WDAY] = bin2bcd(tm->tm_wday);
+-	buf[S35390A_BYTE_HOURS] = s35390a_hr2reg(tm->tm_hour, status & S35390A_FLAG_24H);
++	buf[S35390A_BYTE_HOURS] = s35390a_hr2reg(s35390a, tm->tm_hour);
+ 	buf[S35390A_BYTE_MINS] = bin2bcd(tm->tm_min);
+ 	buf[S35390A_BYTE_SECS] = bin2bcd(tm->tm_sec);
+ 
+@@ -236,21 +235,20 @@ static int s35390a_rtc_set_time(struct device *dev, struct rtc_time *tm)
+ 	for (i = 0; i < 7; ++i)
+ 		buf[i] = bitrev8(buf[i]);
+ 
+-	return s35390a_set_reg(s35390a, S35390A_CMD_TIME1, buf, sizeof(buf));
++	err = s35390a_set_reg(s35390a, S35390A_CMD_TIME1, buf, sizeof(buf));
++
++	return err;
+ }
+ 
+ static int s35390a_rtc_read_time(struct device *dev, struct rtc_time *tm)
+ {
+ 	struct i2c_client *client = to_i2c_client(dev);
+ 	struct s35390a *s35390a = i2c_get_clientdata(client);
+-	u8 buf[7], status;
++	char buf[7], status;
+ 	int i, err;
+ 
+-	err = s35390a_read_status(s35390a, &status);
+-	if (err == 1)
++	if (s35390a_read_status(s35390a, &status) == 1)
+ 		return -EINVAL;
+-	if (err < 0)
+-		return err;
+ 
+ 	err = s35390a_get_reg(s35390a, S35390A_CMD_TIME1, buf, sizeof(buf));
+ 	if (err < 0)
+@@ -262,7 +260,7 @@ static int s35390a_rtc_read_time(struct device *dev, struct rtc_time *tm)
+ 
+ 	tm->tm_sec = bcd2bin(buf[S35390A_BYTE_SECS]);
+ 	tm->tm_min = bcd2bin(buf[S35390A_BYTE_MINS]);
+-	tm->tm_hour = s35390a_reg2hr(buf[S35390A_BYTE_HOURS], status & S35390A_FLAG_24H);
++	tm->tm_hour = s35390a_reg2hr(s35390a, buf[S35390A_BYTE_HOURS]);
+ 	tm->tm_wday = bcd2bin(buf[S35390A_BYTE_WDAY]);
+ 	tm->tm_mday = bcd2bin(buf[S35390A_BYTE_DAY]);
+ 	tm->tm_mon = bcd2bin(buf[S35390A_BYTE_MONTH]) - 1;
+@@ -276,34 +274,12 @@ static int s35390a_rtc_read_time(struct device *dev, struct rtc_time *tm)
+ 	return 0;
+ }
+ 
+-static int s35390a_rtc_alarm_irq_enable(struct device *dev, unsigned int enabled)
+-{
+-	struct s35390a *s35390a = dev_get_drvdata(dev);
+-	u8 sts;
+-	int err;
+-
+-	if (enabled)
+-		sts = S35390A_INT2_MODE_ALARM;
+-	else
+-		sts = S35390A_INT2_MODE_NOINTR;
+-
+-	err = s35390a_set_reg(s35390a, S35390A_CMD_STATUS2, &sts, sizeof(sts));
+-	if (err < 0)
+-		return err;
+-
+-	return 0;
+-}
+-
+ static int s35390a_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alm)
+ {
+ 	struct i2c_client *client = to_i2c_client(dev);
+ 	struct s35390a *s35390a = i2c_get_clientdata(client);
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ 	struct rtc_time *alm_tm = &alm->time;
+ 	char buf[3], sts = 0;
+-=======
+-	u8 buf[3], status1, status2 = 0;
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 	int err, i;
+ 
+ 	/*
+@@ -358,26 +334,22 @@ static int s35390a_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alm)
+ 		alm->time.tm_mon, alm->time.tm_year, alm->time.tm_wday);
+ 
+ 	/* disable interrupt (which deasserts the irq line) */
+-	err = s35390a_set_reg(s35390a, S35390A_CMD_STATUS2, &status2, sizeof(status2));
++	err = s35390a_set_reg(s35390a, S35390A_CMD_STATUS2, &sts, sizeof(sts));
+ 	if (err < 0)
+ 		return err;
+ 
+ 	/* clear pending interrupt (in STATUS1 only), if any */
+-	err = s35390a_get_reg(s35390a, S35390A_CMD_STATUS1, &status1, sizeof(status1));
++	err = s35390a_get_reg(s35390a, S35390A_CMD_STATUS1, &sts, sizeof(sts));
+ 	if (err < 0)
+ 		return err;
+ 
+ 	if (alm->enabled)
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+ 		sts = S35390A_INT2_MODE_ALARM | S35390A_INT2_MODE_32K;
+-=======
+-		status2 = S35390A_INT2_MODE_ALARM;
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ 	else
+-		status2 = S35390A_INT2_MODE_NOINTR;
++		sts = S35390A_INT2_MODE_NOINTR;
+ 
+-	/* set interrupt mode*/
+-	err = s35390a_set_reg(s35390a, S35390A_CMD_STATUS2, &status2, sizeof(status2));
++	/* set interupt mode*/
++	err = s35390a_set_reg(s35390a, S35390A_CMD_STATUS2, &sts, sizeof(sts));
+ 	if (err < 0)
+ 		return err;
+ 
+@@ -386,8 +358,8 @@ static int s35390a_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alm)
+ 	else
+ 		buf[S35390A_ALRM_BYTE_WDAY] = 0;
+ 
+-	buf[S35390A_ALRM_BYTE_HOURS] = s35390a_hr2reg(alm->time.tm_hour,
+-						      status1 & S35390A_FLAG_24H) | 0x80;
++	buf[S35390A_ALRM_BYTE_HOURS] = s35390a_hr2reg(s35390a,
++			alm->time.tm_hour) | 0x80;
+ 	buf[S35390A_ALRM_BYTE_MINS] = bin2bcd(alm->time.tm_min) | 0x80;
+ 
+ 	if (alm->time.tm_hour >= 12)
+@@ -406,20 +378,14 @@ static int s35390a_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alm)
+ {
+ 	struct i2c_client *client = to_i2c_client(dev);
+ 	struct s35390a *s35390a = i2c_get_clientdata(client);
+-	u8 buf[3], status1, status2;
++	char buf[3], sts;
+ 	int i, err;
+ 
+-	err = s35390a_read_status(s35390a, &status1);
+-	if (err == 1)
+-		return -EINVAL;
+-	if (err < 0)
+-		return err;
+-
+-	err = s35390a_get_reg(s35390a, S35390A_CMD_STATUS2, &status2, sizeof(status2));
++	err = s35390a_get_reg(s35390a, S35390A_CMD_STATUS2, &sts, sizeof(sts));
+ 	if (err < 0)
+ 		return err;
+ 
+-	if ((status2 & S35390A_INT2_MODE_MASK) != S35390A_INT2_MODE_ALARM) {
++	if ((sts & S35390A_INT2_MODE_MASK) != S35390A_INT2_MODE_ALARM) {
+ 		/*
+ 		 * When the alarm isn't enabled, the register to configure
+ 		 * the alarm time isn't accessible.
+@@ -448,8 +414,8 @@ static int s35390a_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alm)
+ 
+ 	if (buf[S35390A_ALRM_BYTE_HOURS] & 0x80)
+ 		alm->time.tm_hour =
+-			s35390a_reg2hr(buf[S35390A_ALRM_BYTE_HOURS] & ~0x80,
+-				       status1 & S35390A_FLAG_24H);
++			s35390a_reg2hr(s35390a,
++				       buf[S35390A_ALRM_BYTE_HOURS] & ~0x80);
+ 
+ 	if (buf[S35390A_ALRM_BYTE_MINS] & 0x80)
+ 		alm->time.tm_min = bcd2bin(buf[S35390A_ALRM_BYTE_MINS] & ~0x80);
+@@ -469,7 +435,7 @@ static int s35390a_rtc_ioctl(struct device *dev, unsigned int cmd,
+ {
+ 	struct i2c_client *client = to_i2c_client(dev);
+ 	struct s35390a *s35390a = i2c_get_clientdata(client);
+-	u8 sts;
++	char sts;
+ 	int err;
+ 
+ 	switch (cmd) {
+@@ -483,7 +449,7 @@ static int s35390a_rtc_ioctl(struct device *dev, unsigned int cmd,
+ 		break;
+ 	case RTC_VL_CLR:
+ 		/* update flag and clear register */
+-		err = s35390a_init(s35390a, &sts);
++		err = s35390a_init(s35390a);
+ 		if (err < 0)
+ 			return err;
+ 		break;
+@@ -495,12 +461,11 @@ static int s35390a_rtc_ioctl(struct device *dev, unsigned int cmd,
+ }
+ 
+ static const struct rtc_class_ops s35390a_rtc_ops = {
+-	.read_time		= s35390a_rtc_read_time,
+-	.set_time		= s35390a_rtc_set_time,
+-	.set_alarm		= s35390a_rtc_set_alarm,
+-	.read_alarm		= s35390a_rtc_read_alarm,
+-	.alarm_irq_enable	= s35390a_rtc_alarm_irq_enable,
+-	.ioctl			= s35390a_rtc_ioctl,
++	.read_time	= s35390a_rtc_read_time,
++	.set_time	= s35390a_rtc_set_time,
++	.set_alarm	= s35390a_rtc_set_alarm,
++	.read_alarm	= s35390a_rtc_read_alarm,
++	.ioctl          = s35390a_rtc_ioctl,
+ };
+ 
+ static irqreturn_t s35390a_irq(int irq, void *dev_id)
+@@ -547,8 +512,7 @@ static int s35390a_probe(struct i2c_client *client)
+ 	int err, err_read;
+ 	unsigned int i;
+ 	struct s35390a *s35390a;
+-	struct rtc_device *rtc;
+-	u8 buf, status1;
++	char buf, status1;
+ 	struct device *dev = &client->dev;
+ 
+ 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
+@@ -573,9 +537,9 @@ static int s35390a_probe(struct i2c_client *client)
+ 		}
+ 	}
+ 
+-	rtc = devm_rtc_allocate_device(dev);
+-	if (IS_ERR(rtc))
+-		return PTR_ERR(rtc);
++	s35390a->rtc = devm_rtc_allocate_device(dev);
++	if (IS_ERR(s35390a->rtc))
++		return PTR_ERR(s35390a->rtc);
+ 
+ 	err_read = s35390a_read_status(s35390a, &status1);
+ 	if (err_read < 0) {
+@@ -583,12 +547,17 @@ static int s35390a_probe(struct i2c_client *client)
+ 		return err_read;
+ 	}
+ 
++	if (status1 & S35390A_FLAG_24H)
++		s35390a->twentyfourhour = 1;
++	else
++		s35390a->twentyfourhour = 0;
++
+ 	if (status1 & S35390A_FLAG_INT2) {
+ 		/* disable alarm (and maybe test mode) */
+ 		buf = 0;
+ 		err = s35390a_set_reg(s35390a, S35390A_CMD_STATUS2, &buf, 1);
+ 		if (err < 0) {
+-			dev_err(dev, "error disabling alarm\n");
++			dev_err(dev, "error disabling alarm");
+ 			return err;
+ 		}
+ 	} else {
+@@ -609,12 +578,12 @@ static int s35390a_probe(struct i2c_client *client)
+ 
+ 	device_set_wakeup_capable(dev, 1);
+ 
+-	rtc->ops = &s35390a_rtc_ops;
+-	rtc->range_min = RTC_TIMESTAMP_BEGIN_2000;
+-	rtc->range_max = RTC_TIMESTAMP_END_2099;
++	s35390a->rtc->ops = &s35390a_rtc_ops;
++	s35390a->rtc->range_min = RTC_TIMESTAMP_BEGIN_2000;
++	s35390a->rtc->range_max = RTC_TIMESTAMP_END_2099;
+ 
+-	set_bit(RTC_FEATURE_ALARM_RES_MINUTE, rtc->features);
+-	clear_bit(RTC_FEATURE_UPDATE_INTERRUPT, rtc->features);
++	set_bit(RTC_FEATURE_ALARM_RES_MINUTE, s35390a->rtc->features);
++	clear_bit(RTC_FEATURE_UPDATE_INTERRUPT, s35390a->rtc->features );
+ 
+ 	if (client->irq > 0) {
+ 		err = devm_request_threaded_irq(&client->dev, client->irq,
+@@ -629,9 +598,9 @@ static int s35390a_probe(struct i2c_client *client)
+ 	}
+ 
+ 	if (status1 & S35390A_FLAG_INT2)
+-		rtc_update_irq(rtc, 1, RTC_AF);
++		rtc_update_irq(s35390a->rtc, 1, RTC_AF);
+ 
+-	return devm_rtc_register_device(rtc);
++	return devm_rtc_register_device(s35390a->rtc);
+ }
+ 
+ static struct i2c_driver s35390a_driver = {
+diff --git a/include/linux/usb/quirks.h b/include/linux/usb/quirks.h
+remerge CONFLICT (content): Merge conflict in include/linux/usb/quirks.h
+index afcb717e41e6..6cb749b91e78 100644
+--- a/include/linux/usb/quirks.h
++++ b/include/linux/usb/quirks.h
+@@ -81,12 +81,10 @@
+ /* Device claims zero configurations, forcing to 1 */
+ #define USB_QUIRK_FORCE_ONE_CONFIG		BIT(18)
+ 
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+-/* device can't support auto suspend function */
+-#define USB_QUIRK_AUTO_SUSPEND			BIT(19)
+-=======
+ /* Use a 255 bytes config descriptor request mirroring windows behavior */
+ #define USB_QUIRK_WINDOWS_CONFIG_REQ_SIZE	BIT(19)
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
++
++/* Rockchip: device can't support auto suspend function (BIT(19) upstream is taken) */
++#define USB_QUIRK_AUTO_SUSPEND			BIT(20)
+ 
+ #endif /* __LINUX_USB_QUIRKS_H */
+diff --git a/sound/core/info.c b/sound/core/info.c
+remerge CONFLICT (content): Merge conflict in sound/core/info.c
+index 18cf0638e9f3..ce5caf28f041 100644
+--- a/sound/core/info.c
++++ b/sound/core/info.c
+@@ -557,10 +557,6 @@ void snd_info_card_disconnect(struct snd_card *card)
+ 	if (card->proc_root)
+ 		snd_info_clear_entries(card->proc_root);
+ 	card->proc_root_link = NULL;
+-<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
+-	mutex_unlock(&info_mutex);
+-=======
+->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
+ }
+ 
+ /*
