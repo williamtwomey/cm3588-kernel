@@ -23,7 +23,7 @@ They're all on the [releases page](https://github.com/williamtwomey/cm3588-kerne
 | Package | What it is | Status |
 |---|---|---|
 | `linux-image-6.1.141-fsfix2` | FriendlyElec `nanopi6-v6.1.y` (6.1.141) + the double-unlock fix + 71 stable fs/xfs, overlayfs and iomap fixes from up to 6.1.192 | Ran a day with 39 containers on XFS/overlay2, no hangs. Recommended. |
-| `6.1.193-rk193` | rk192 merged with stable v6.1.193 (rk192.1's two fixes are upstream in .193). See [patches/rk193](patches/rk193/README.md). | Testing on my board since 2026-11-23, no release yet. |
+| `6.1.193-rk193` | rk192 merged with stable v6.1.193 (rk192.1's two fixes are upstream in .193). See [patches/rk193](patches/rk193/README.md). | Experimental. Boots and runs everything on my board (same checks as rk192.1, both repros pass), but uptime is short so far; long-term testing is ongoing. Replaces rk192.1. [Release 2026.11.23](https://github.com/williamtwomey/cm3588-kernel/releases/tag/2026.11.23). |
 | `linux-image-6.1.192-rk192.1` | rk192 plus two stable-queue fixes for NULL folio dereferences that 6.1.192 itself shipped (ext4 mballoc, ntfs3). See below. | Experimental, same as rk192. Replaces rk192; don't run rk192. |
 | `linux-image-6.1.192-rk192` | Rockchip `develop-6.1` (6.1.172) merged with stable v6.1.192, plus FriendlyElec's board support ported over (DTS, RKNPU 0.9.8, PCIe/combphy/pwm-fan bits). No ACK code, so the bug never existed here. | **Superseded by rk192.1.** Oopses in ext4 under memory pressure and wedges the box (below). Otherwise it boots and runs everything on my board (NVMe RAID, 2.5G NIC, NPU, MPP/RGA for Immich). On one of two boots the RTL8125's PCIe link didn't train, and I haven't root-caused it yet. |
 

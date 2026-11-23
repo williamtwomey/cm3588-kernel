@@ -11,7 +11,8 @@ PKG=linux-image-$KVER
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 R=$W/root; mkdir -p "$R/DEBIAN" "$R/usr/lib/$PKG" "$R/lib/modules" "$R/usr/share/doc/$PKG"
 if head -c4 "$KIMG" | grep -q KRNL; then cp "$KIMG" "$R/usr/lib/$PKG/kernel.img"
-else "$TOP/kernel/scripts/mkkrnlimg" "$KIMG" "$R/usr/lib/$PKG/kernel.img" >/dev/null; fi
+elif [ -x "$TOP/kernel/scripts/mkkrnlimg" ]; then "$TOP/kernel/scripts/mkkrnlimg" "$KIMG" "$R/usr/lib/$PKG/kernel.img" >/dev/null
+else python3 -I "$TOP/tools/mkkrnlimg.py" "$KIMG" "$R/usr/lib/$PKG/kernel.img"; fi  # same output, checked against 2026.11.14
 cp "$RES" "$R/usr/lib/$PKG/resource.img"
 tar xzf "$MODS" -C "$R/lib/modules"
 [ -d "$R/lib/modules/$KVER" ] || { echo "modules tar has no $KVER/"; exit 1; }
