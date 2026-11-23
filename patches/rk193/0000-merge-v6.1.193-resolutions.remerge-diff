@@ -1,9 +1,9 @@
-3347f9df0442083ec398431503783f69e41d2a12
+369f2e5e48465b050e851166f7eb76dad3aa14f5
 Merge v6.1.193 into cm3588 rk192 (6.1.192 + board port) for CM3588
 
 Conflict resolutions:
 - Rockchip-forked drivers keep Rockchip's whole file: rockchip-otp,
-  analogix_dp_core, dw_hdmi-rockchip, pcie-rockchip-host (rk3399),
+  analogix_dp_core, dw_hdmi-rockchip,
   rtc-s35390a, ov5648, ov8856, ov8865.
 - arch/arm64/boot/dts/rockchip: Rockchip's whole directory. Stable's
   rk356x restructure (rk356x.dtsi -> rk356x-base.dtsi) targets mainline's
@@ -18,6 +18,9 @@ Conflict resolutions:
 - uvc_driver: Rockchip's AUTO_SUSPEND blacklist plus stable's
   UVC_QUIRK_DISABLE_AUTOSUSPEND.
 - sound/core/info.c: stable (guard(mutex) replaces the unlock).
+- pcie-rockchip-host (rk3399): auto-merge, conflict hunk from stable
+  (drops Rockchip's 5.0 GT/s retrain, as stable's "Do not attempt 5.0
+  GT/s retraining" does; PCIE_LINK_IS_GEN2 is gone from the header).
 
 
 diff --git a/arch/arm64/boot/dts/rockchip/rk3328.dtsi b/arch/arm64/boot/dts/rockchip/rk3328.dtsi
@@ -1770,21 +1773,42 @@ index 60b22f317d9a..9c6c1f258b19 100644
  
 diff --git a/drivers/pci/controller/pcie-rockchip-host.c b/drivers/pci/controller/pcie-rockchip-host.c
 remerge CONFLICT (content): Merge conflict in drivers/pci/controller/pcie-rockchip-host.c
-index ec54c0ce6a88..991818fd0b18 100644
+index ec54c0ce6a88..e261feb5fe91 100644
 --- a/drivers/pci/controller/pcie-rockchip-host.c
 +++ b/drivers/pci/controller/pcie-rockchip-host.c
-@@ -378,7 +378,6 @@ static int rockchip_pcie_host_init_port(struct rockchip_pcie *rockchip)
+@@ -378,37 +378,6 @@ static int rockchip_pcie_host_init_port(struct rockchip_pcie *rockchip)
  		goto err_power_off_phy;
  	}
  
 -<<<<<<< be5164e93136 (PCI: rockchip: dw: honour rockchip,init-delay-ms (FriendlyElec))
- 	err = readl_poll_timeout(rockchip->apb_base + PCIE_CLIENT_DEBUG_OUT_0,
- 				 status, PCIE_LINK_IS_L0(status), 20,
- 				 timeouts * USEC_PER_MSEC);
-@@ -407,8 +406,6 @@ static int rockchip_pcie_host_init_port(struct rockchip_pcie *rockchip)
- 			dev_dbg(dev, "PCIe link training gen2 timeout, fall back to gen1!\n");
- 	}
- 
+-	err = readl_poll_timeout(rockchip->apb_base + PCIE_CLIENT_DEBUG_OUT_0,
+-				 status, PCIE_LINK_IS_L0(status), 20,
+-				 timeouts * USEC_PER_MSEC);
+-	if (err) {
+-		dev_err(dev, "LTSSM is not L0!\n");
+-		return -ETIMEDOUT;
+-	}
+-
+-	if (rockchip->link_gen == 2) {
+-		/*
+-		 * Enable retrain for gen2. This should be configured only after
+-		 * gen1 finished.
+-		 */
+-		status = rockchip_pcie_read(rockchip, PCIE_RC_CONFIG_CR + PCI_EXP_LNKCTL2);
+-		status &= ~PCI_EXP_LNKCTL2_TLS;
+-		status |= PCI_EXP_LNKCTL2_TLS_5_0GT;
+-		rockchip_pcie_write(rockchip, status, PCIE_RC_CONFIG_CR + PCI_EXP_LNKCTL2);
+-		status = rockchip_pcie_read(rockchip, PCIE_RC_CONFIG_CR + PCI_EXP_LNKCTL);
+-		status |= PCI_EXP_LNKCTL_RL;
+-		rockchip_pcie_write(rockchip, status, PCIE_RC_CONFIG_CR + PCI_EXP_LNKCTL);
+-
+-		err = readl_poll_timeout(rockchip->apb_base + PCIE_CORE_CTRL,
+-					 status, PCIE_LINK_IS_GEN2(status), 20,
+-					 500 * USEC_PER_MSEC);
+-		if (err)
+-			dev_dbg(dev, "PCIe link training gen2 timeout, fall back to gen1!\n");
+-	}
+-
 -=======
 ->>>>>>> 1ca1436ccc68 (Linux 6.1.193)
  	/* Check the final link width from negotiated lane counter from MGMT */
